@@ -1,0 +1,37 @@
+#!/usr/bin/python
+
+import sys
+import os
+import mpris2
+
+cmd = sys.argv[1]
+
+try:
+    player = mpris2.Player(dbus_interface_info={'dbus_uri': 'org.mpris.MediaPlayer2.quodlibet'})
+except:
+    player = mpris2.Player(dbus_interface_info={'dbus_uri': 'org.mpris.MediaPlayer2.vlc'})
+
+def corrige (s):
+	return s.replace('&', '&amp;').replace("'", '`')
+
+if cmd == 'next':
+	player.Next()
+elif cmd == 'prev':
+	player.Previous()
+elif cmd == "play-pause":
+	player.PlayPause()
+else:
+    currentURL = player.Metadata['xesam:url']
+    try:
+        currentTitle = corrige(player.Metadata['xesam:title'])
+    except KeyError:
+        currentTitle = ''
+    try:
+        more = corrige(player.Metadata['vlc:nowplaying'])
+    except KeyError:
+        more = ''
+    try:
+        genre = corrige(' / '.join(player.Metadata['xesam:genre']))
+    except KeyError:
+        genre = ''
+    os.system(rf"""zenity --info --title="MUSIC" --text='{currentTitle}\n\n{more}\n\n{genre}\n\n{currentURL}'""")
