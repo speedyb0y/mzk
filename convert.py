@@ -123,14 +123,14 @@ if tid == CPUS:
 
     # WE ARE THE WRITER
     os.close(pipeIn)
-    
+
     try:
         for f in sys.argv[1:]:
             for f in os.popen(f"find '{f}' -type f -print0").read(8*1024*1024).encode().split(b'\x00'):
                 os.write(pipeOut, f)
     except KeyboardInterrupt:
         pass
-        
+
     os.close(pipeOut)
 
     # WAIT ALL CHILDS TO FINISH
@@ -206,72 +206,84 @@ try: # THREAD
             with open(original, 'rb') as xxx:
                 with os.popen(f'ffprobe -v quiet -print_format json -show_format -show_streams -- /proc/{os.getpid()}/fd/{xxx.fileno()}') as fd:
                     fp = json.loads(fd.read(1*1024*1024))
-            fpFormat  = fp['format']
+
+            try:
+                fpFormat  = fp['format']
+            except KeyError:
+                print(f'[{tid}] {original}: ERROR: NO FFPROBE FORMAT!')
+                continue
+
             fpStream, = (s for s in fp['streams'] if s['codec_type'] == 'audio') # NOTE: ONLY SUPPORT FILES WITH 1 AUDIO STREAM
+
+            (
+                # FORMAT
+                ORIGINAL_FORMAT_NAME,
+                ORIGINAL_FORMAT_NAME_LONG,
+                ORIGINAL_TAGS,
+                # STREAM
+                ORIGINAL_CODEC_NAME,
+                ORIGINAL_CODEC_LONG_NAME,
+                ORIGINAL_CODEC_TAG_STRING,
+                ORIGINAL_CODEC_TAG,
+                ORIGINAL_SAMPLE_FMT,
+                ORIGINAL_SAMPLE_RATE,
+                ORIGINAL_CHANNELS,
+                ORIGINAL_CHANNEL_LAYOUT,
+                ORIGINAL_BITS,
+                ORIGINAL_BITS_RAW,
+                ORIGINAL_DURATION_TS,
+                ORIGINAL_DURATION,
+                ORIGINAL_BITRATE,
+                ORIGINAL_TIME_BASE,
+                ORIGINAL_TAGS2
+
+            ) = ( (d[k] if k in d else None)
+                for d, K in (
+                    ( fpFormat, (
+                        'format_name',
+                        'format_long_name',
+                        'tags',
+                    )),
+                    ( fpStream, (
+                        'codec_name',
+                        'codec_long_name',
+                        'codec_tag_string',
+                        'codec_tag',
+                        'sample_fmt',
+                        'sample_rate',
+                        'channels',
+                        'channel_layout',
+                        'bits_per_sample',
+                        'bits_per_raw_sample',
+                        'duration_ts',
+                        'duration',
+                        'bit_rate',
+                        'time_base',
+                        'tags',
+                    )),
+                )
+                for k in K
+            )
+
+            if ORIGINAL_DURATION is None:
+                print(f'[{tid}] {original}: ERROR: DURATION IS NONE!')
+                continue
+
+            #
+            ORIGINAL_FILEPATH         = original
+            ORIGINAL_FORMAT_NAME      = str.upper (ORIGINAL_FORMAT_NAME)
+            ORIGINAL_FORMAT_NAME_LONG = str.upper (ORIGINAL_FORMAT_NAME_LONG)
+            ORIGINAL_CODEC_NAME       = str.upper (ORIGINAL_CODEC_NAME)
+            ORIGINAL_CODEC_LONG_NAME  = str.upper (ORIGINAL_CODEC_LONG_NAME)
+            ORIGINAL_CHANNELS         = int       (ORIGINAL_CHANNELS)
+            ORIGINAL_SAMPLE_RATE      = int       (ORIGINAL_SAMPLE_RATE)
+            ORIGINAL_DURATION         = float     (ORIGINAL_DURATION)
+            ORIGINAL_DURATION_TS      = int       (ORIGINAL_DURATION_TS)
+
         except BaseException:
             print(f'[{tid}] {original}: ERROR: FFPROBE FAILED')
+            traceback.print_exc()
             continue
-
-        (
-            # FORMAT
-            ORIGINAL_FORMAT_NAME,
-            ORIGINAL_FORMAT_NAME_LONG,
-            ORIGINAL_TAGS,
-            # STREAM
-            ORIGINAL_CODEC_NAME,
-            ORIGINAL_CODEC_LONG_NAME,
-            ORIGINAL_CODEC_TAG_STRING,
-            ORIGINAL_CODEC_TAG,
-            ORIGINAL_SAMPLE_FMT,
-            ORIGINAL_SAMPLE_RATE,
-            ORIGINAL_CHANNELS,
-            ORIGINAL_CHANNEL_LAYOUT,
-            ORIGINAL_BITS,
-            ORIGINAL_BITS_RAW,
-            ORIGINAL_DURATION_TS,
-            ORIGINAL_DURATION,
-            ORIGINAL_BITRATE,
-            ORIGINAL_TIME_BASE,
-            ORIGINAL_TAGS2
-
-        ) = ( (d[k] if k in d else None)
-            for d, K in (
-                ( fpFormat, (
-                    'format_name',
-                    'format_long_name',
-                    'tags',
-                )),
-                ( fpStream, (
-                    'codec_name',
-                    'codec_long_name',
-                    'codec_tag_string',
-                    'codec_tag',
-                    'sample_fmt',
-                    'sample_rate',
-                    'channels',
-                    'channel_layout',
-                    'bits_per_sample',
-                    'bits_per_raw_sample',
-                    'duration_ts',
-                    'duration',
-                    'bit_rate',
-                    'time_base',
-                    'tags',
-                )),
-            )
-            for k in K
-        )
-
-        #
-        ORIGINAL_FILEPATH         = original
-        ORIGINAL_FORMAT_NAME      = str.upper (ORIGINAL_FORMAT_NAME)
-        ORIGINAL_FORMAT_NAME_LONG = str.upper (ORIGINAL_FORMAT_NAME_LONG)
-        ORIGINAL_CODEC_NAME       = str.upper (ORIGINAL_CODEC_NAME)
-        ORIGINAL_CODEC_LONG_NAME  = str.upper (ORIGINAL_CODEC_LONG_NAME)
-        ORIGINAL_CHANNELS         = int       (ORIGINAL_CHANNELS)
-        ORIGINAL_SAMPLE_RATE      = int       (ORIGINAL_SAMPLE_RATE)
-        ORIGINAL_DURATION         = float     (ORIGINAL_DURATION)
-        ORIGINAL_DURATION_TS      = int       (ORIGINAL_DURATION_TS)
 
         if ORIGINAL_BITS     is not None: ORIGINAL_BITS     = int(ORIGINAL_BITS)
         if ORIGINAL_BITS_RAW is not None: ORIGINAL_BITS_RAW = int(ORIGINAL_BITS_RAW)
@@ -331,6 +343,7 @@ try: # THREAD
                 ('PCM_S16LE', 's16',  16, None) : ('flac', 16),
                 ('PCM_S24BE', 's32',  24, 24)   : ('flac', 24),
                 ('PCM_S24LE', 's32',  24, 24)   : ('flac', 24),
+                ('PCM_S32LE', 's32',  32, 32)   : ('flac', 32),
                 ('MP3',       'fltp', 0,  None) : ('opus', 24),
                 ('AAC',       'fltp', 0,  None) : ('opus', 24),
                 ('VORBIS',    'fltp', 0,  None) : ('opus', 24),

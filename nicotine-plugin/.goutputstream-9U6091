@@ -1,0 +1,90 @@
+#!/usr/bin/python
+
+import sys
+import os
+import time
+import cbor2 as cbor
+import re
+
+import pynicotine
+
+from pynicotine.pluginsystem import BasePlugin
+from pynicotine.utils import http_request
+from pynicotine.utils import human_length
+from pynicotine.utils import humanize
+
+# grep def /usr/lib/python*/site-packages/pynicotine/pluginsystem.py
+
+class Plugin(BasePlugin):
+
+    def __init__(self, *args, **kwargs):
+        print('MUZIK: INITALIZING')
+        super().__init__(*args, **kwargs)
+
+    def download_finished_notification (self, user, virtual_path, real_path):
+        KNOWNS.add(f'{user}\x00{virtual_path}'.encode())
+        os.write(fd, f'{user}\x00{virtual_path}\x01'.encode())
+        print(f'MUZIK: DOWNLOAD #{len(KNOWNS)} FINISHED:', user, virtual_path)
+
+    def upload_finished_notification(self, user, virtual_path, real_path):
+        print('MUZIK: upload_finished_notification()', user, virtual_path, real_path)
+
+    # def incoming_public_chat_notification(self, room, user, line):
+        # print('MUZIK: incoming_public_chat_notification()', room, user, line)
+
+    # def incoming_private_chat_notification(self, user, line):
+        # print('MUZIK: incoming_private_chat_notification()', user, line)
+
+    def search_request_notification(self, *_):
+        print('MUZIK: search_request_notification()', repr(_))
+
+    def distrib_search_notification(self, term, user, token):
+        # print(f'MUZIK: USER: {user} TOKEN: {token} TERM: {term}')
+        pass
+
+    # def outgoing_global_search_event(self, *_):
+        # print('MUZIK: outgoing_global_search_event()', repr(_))
+
+    # def outgoing_room_search_event(self, *_):
+        # print('MUZIK: outgoing_room_search_event()', repr(_))
+
+    # def outgoing_buddy_search_event(self, *_):
+        # print('MUZIK: outgoing_buddy_search_event()', repr(_))
+
+    # def outgoing_user_search_event(self, *_):
+        # print('MUZIK: outgoing_user_search_event()', repr(_))
+
+def add_result_list(self, result_list, user, country, inqueue, ulspeed, h_speed, h_queue, color, private=False):
+
+    # self.num_results_found
+    self.max_limit = 50000
+    self.max_limited = False
+
+    # 
+    # '~Music (Sorted) (G)\\Metal\\Opeth (Sweden)\\01. Studio Albums\\1995 (2008) - Orchid (Japanese Edition)\\01. In Mist She Was Standing.mp3',
+    # fsize, None, {0: 320, 1: 849, 2: 0}
+    #)
+
+    return REAL(self, [ (order, fpath, fsize, nada, dic)
+        for order, fpath, fsize, nada, dic in result_list
+            if f'{user}\x00{fpath}'.encode() not in KNOWNS or print('MUZIK: FILTERING', fsize, user, fpath)
+				if fsize <= 350*1024*1024 or print('MUZIK: IGNORING TOO BIG', fsize, user, fpath)
+    ], user, country, inqueue, ulspeed, h_speed, h_queue, color, private)
+
+KNOWNS = set(map(xxhash.xxh128_intdigest, open(f'/home/speedyb0y/NICOTINE-DOWNLOADED', 'rb').read().split(b'\x01')))
+
+print(f'HAS {len(KNOWNS)} FILES')
+
+if os.system(f'cp -v -- /home/speedyb0y/NICOTINE-DOWNLOADED /home/speedyb0y/NICOTINE-DOWNLOADED-{int(time.time()*1000)}'):
+    print('FAILED TO BACKUP')
+    exit(1)
+
+fd = os.open(f'/home/speedyb0y/NICOTINE-DOWNLOADED', os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o0644)
+
+#
+REAL = pynicotine.gtkgui.search.Search.add_result_list
+
+pynicotine.gtkgui.search.Search.add_result_list = add_result_list
+
+# TODO: no set(), usar o xxhash bem pequeno
+# TODO: 
