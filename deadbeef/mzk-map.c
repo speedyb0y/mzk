@@ -235,8 +235,7 @@ int main (int argsN, char* args[]) {
         uint diskMajor; off_t start;
         uint diskMinor;
 
-#define TREE_HASH0(T, i) ((T)[1+(i)].hash[0])
-        const dev_t partDev = TREE_HASH0(partsTree, partID);
+        const dev_t partDev = TREE_HASHES(partsTree, partID)[0];
 
         const uint partMajor = major(partDev);
         const uint partMinor = minor(partDev);

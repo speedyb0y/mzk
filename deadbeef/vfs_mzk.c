@@ -10,14 +10,14 @@
 static DB_functions_t *deadbeef;
 static DB_vfs_t plugin;
 
-typedef struct DB_FILE_MZK {
+typedef struct mzk_file_s {
     DB_FILE file;
     u32 id;
     int fd;
     off_t pos; // of the descriptor
     off_t start;
     off_t end;
-} DB_FILE_MZK;
+} mzk_file_s;
 
 //
 static const char* scheme_names[] = { "/mnt/MZK", NULL };
@@ -50,7 +50,7 @@ static DB_FILE* mzk_open (const char* fpath) {
         return NULL;
     }
 
-    DB_FILE_MZK* const mzf = malloc(sizeof(*mzf));
+    mzk_file_s* const mzf = malloc(sizeof(*mzf));
 
     if (mzf) {
 
@@ -63,7 +63,7 @@ static DB_FILE* mzk_open (const char* fpath) {
         mzf->fd       = fds[song->disk];
         mzf->pos      = song->start;
         mzf->start    = song->start;
-        mzf->end      = song->start + song->end;
+        mzf->end      = song->start + song->size;
     }
 
     return (DB_FILE*)mzf;
@@ -76,7 +76,7 @@ static void mzk_close (DB_FILE* file) {
 
 static size_t mzk_read (void* buff, size_t size, size_t qnt, DB_FILE* file) {
 
-    DB_FILE_MZK* const mzf = PTR(file);
+    mzk_file_s* const mzf = PTR(file);
 
     // QUANTOS OBJETOS TEM DISPONIVEIS
     const size_t tem = (mzf->end - mzf->pos) / size;
@@ -106,21 +106,21 @@ static size_t mzk_read (void* buff, size_t size, size_t qnt, DB_FILE* file) {
     return qnt;
 }
 
-static int mzk_seek (DB_FILE* file, int64_t offset, int whence) {
+static int mzk_seek (DB_FILE* dfile, int64_t offset, int whence) {
 
-    DB_FILE_MZK* const mzf = PTR(file);
+    mzk_file_s* const file = PTR(dfile);
 
     off_t pos;
 
     switch (whence) {
         case SEEK_SET:
-            pos = mzf->start;
+            pos = file->start;
             break;
         case SEEK_CUR:
-            pos = mzf->pos;
+            pos = file->pos;
             break;
         case SEEK_END:
-            pos = mzf->end;
+            pos = file->end;
             break;
         default:
             goto _err;
@@ -129,10 +129,10 @@ static int mzk_seek (DB_FILE* file, int64_t offset, int whence) {
     // APPLY
     pos += offset;
 
-    if (pos >= mzf->start
-     && pos <= mzf->end) {
+    if (pos >= file->start
+     && pos <= file->end) {
         // COMMIT
-        mzf->pos = pos;
+        file->pos = pos;
         return 0;
     }
 
@@ -141,23 +141,23 @@ _err: // NOTE: ELE PODE ESTAR QUERENDO CRIAR UM HOLE, MAS SOMOS SOMENTE LEITURA
     return -1;
 }
 
-static int64_t mzk_tell (DB_FILE* file) {
+static int64_t mzk_tell (DB_FILE* dfile) {
 
-    const DB_FILE_MZK* const mzf = PTR(file);
+    const mzk_file_s* const file = PTR(dfile);
 
-    return mzf->pos - mzf->start;
+    return file->pos - file->start;
 }
 
-static void mzk_rewind (DB_FILE* file) {
+static void mzk_rewind (DB_FILE* dfile) {
 
-    DB_FILE_MZK* const mzf = PTR(file);
+    mzk_file_s* const file = PTR(dfile);
 
-    mzf->pos = mzf->start;
+    file->pos = file->start;
 }
 
 static int64_t mzk_getlength (DB_FILE* file) {
 
-    const DB_FILE_MZK* const mzf = PTR(file);
+    const mzk_file_s* const mzf = PTR(file);
 
     return mzf->end - mzf->start;
 }

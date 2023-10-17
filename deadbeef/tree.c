@@ -92,6 +92,8 @@ typedef u64 tree64x128_hash_t;
 #define TREELOOKUP_INSERT(T) tree##T##_insert(tree, ptr, TREE_ARGS_CALL_##T)
 #define TREELOOKUP_NODE_ID (node - tree) - 1
 
+#define TREE_HASHES(T, i) ((T)[1+(i)].hash)
+
 #define _TREE(T)                                                                                                           \
 typedef struct tree_s(T) {                                                                                                 \
             tree_len_t(T) childs[TREE_CHILDS_N(T)];                                                                        \
