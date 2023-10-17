@@ -178,6 +178,10 @@ try: # THREAD
     while original := os.read(pipeIn, 2048):
         original = original.decode()
 
+        if not original.lower().endswith(('.mp3', '.aac', '.flac', '.wav', '.mp4', '.m4a', '.ogg', '.opus', '.ape', '.wma', '.wv', '.alac')):
+            print(f'[{tid}] {original}: SKIPPED UNKNOWN EXTENSION')
+            continue
+
         i = o = imap = ibuff = fp = fpFormat = fpStream = tags = args = None
 
         # ONLY IF EXISTS
@@ -265,25 +269,25 @@ try: # THREAD
                 for k in K
             )
 
-            if ORIGINAL_DURATION is None:
-                print(f'[{tid}] {original}: ERROR: DURATION IS NONE!')
-                continue
-
-            #
-            ORIGINAL_FILEPATH         = original
-            ORIGINAL_FORMAT_NAME      = str.upper (ORIGINAL_FORMAT_NAME)
-            ORIGINAL_FORMAT_NAME_LONG = str.upper (ORIGINAL_FORMAT_NAME_LONG)
-            ORIGINAL_CODEC_NAME       = str.upper (ORIGINAL_CODEC_NAME)
-            ORIGINAL_CODEC_LONG_NAME  = str.upper (ORIGINAL_CODEC_LONG_NAME)
-            ORIGINAL_CHANNELS         = int       (ORIGINAL_CHANNELS)
-            ORIGINAL_SAMPLE_RATE      = int       (ORIGINAL_SAMPLE_RATE)
-            ORIGINAL_DURATION         = float     (ORIGINAL_DURATION)
-            ORIGINAL_DURATION_TS      = int       (ORIGINAL_DURATION_TS)
-
         except BaseException:
             print(f'[{tid}] {original}: ERROR: FFPROBE FAILED')
             traceback.print_exc()
             continue
+
+        if ORIGINAL_DURATION is None:
+            print(f'[{tid}] {original}: ERROR: DURATION IS NONE!')
+            continue
+
+        #
+        ORIGINAL_FILEPATH         = original
+        ORIGINAL_FORMAT_NAME      = str.upper (ORIGINAL_FORMAT_NAME)
+        ORIGINAL_FORMAT_NAME_LONG = str.upper (ORIGINAL_FORMAT_NAME_LONG)
+        ORIGINAL_CODEC_NAME       = str.upper (ORIGINAL_CODEC_NAME)
+        ORIGINAL_CODEC_LONG_NAME  = str.upper (ORIGINAL_CODEC_LONG_NAME)
+        ORIGINAL_CHANNELS         = int       (ORIGINAL_CHANNELS)
+        ORIGINAL_SAMPLE_RATE      = int       (ORIGINAL_SAMPLE_RATE)
+        ORIGINAL_DURATION         = float     (ORIGINAL_DURATION)
+        ORIGINAL_DURATION_TS      = int       (ORIGINAL_DURATION_TS)
 
         if ORIGINAL_BITS     is not None: ORIGINAL_BITS     = int(ORIGINAL_BITS)
         if ORIGINAL_BITS_RAW is not None: ORIGINAL_BITS_RAW = int(ORIGINAL_BITS_RAW)
@@ -348,12 +352,17 @@ try: # THREAD
                 ('AAC',       'fltp', 0,  None) : ('opus', 24),
                 ('VORBIS',    'fltp', 0,  None) : ('opus', 24),
                 ('WMAPRO',    'fltp', 0,  None) : ('opus', 24),
+                ('OPUS',      'fltp', 0,  None) : ('opus', 24), # CAUTION
             } [(ORIGINAL_CODEC_NAME,
                 ORIGINAL_SAMPLE_FMT,
                 ORIGINAL_BITS,
                 ORIGINAL_BITS_RAW)]
         except KeyError as e:
             print(f'[{tid}] {original}: ERROR: EITAAAAAAA!!!', repr(e))
+            continue
+
+        if any('BINAURAL' in v.upper() for v in tags.values()):
+            print(f'[{tid}] {original}: SKIPPED: BINAURAL')
             continue
 
         # CHANNELS

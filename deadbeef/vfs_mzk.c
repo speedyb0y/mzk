@@ -60,14 +60,11 @@ static DB_FILE* mzk_open (const char* fpath) {
 
         mzf->file.vfs = &plugin;
         mzf->id       = sid;
-        mzf->fd       = fds[song_disk(song)];
-        mzf->pos      = song_start(song);
-        mzf->start    = song_start(song);
-        mzf->end      = song_end(song);
-
-		mzk_dbg("OPEN FILE: MZF %p FD %d", mzf, mzf->fd);
-    } else
-    	mzk_err("OPEN FILE: FAILED TO ALLOCATE MEMORY");
+        mzf->fd       = fds[song->disk];
+        mzf->pos      = song->start;
+        mzf->start    = song->start;
+        mzf->end      = song->start + song->end;
+    }
 
     return (DB_FILE*)mzf;
 }

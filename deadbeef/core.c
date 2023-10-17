@@ -6,10 +6,9 @@
 #define SONGS_N 500000
 #define DISKS_N 250
 #define TYPES_N 32
+#define PARTS_N DISKS_N
 
-#define SONG_SIZE_MAX (48ULL*1024*1024*1024)
-#define DISK_ID_MAX (DISKS_N - 1)
-#define TYPE_ID_MAX (TYPES_N - 1)
+#define SONG_SIZE_MAX (32ULL*1024*1024*1024)
 
 // SONGS
 typedef tree32x64_hash_t  song_hash_t;
@@ -29,6 +28,15 @@ typedef tree8x64_s       disk_tree_s;
 #define disks_lookup       tree8x64_lookup
 #define disks_lookup_add   tree8x64_lookup_add
 
+// PARTITIONS
+typedef tree8x64_hash_t  part_hash_t;
+typedef tree8x64_s       part_tree_s;
+#define parts_new          tree8x64_new
+#define parts_add_multiple tree8x64_add_multiple
+#define parts_add_single   tree8x64_add_single
+#define parts_lookup       tree8x64_lookup
+#define parts_lookup_add   tree8x64_lookup_add
+
 // TYPES
 typedef tree8x64_hash_t  type_hash_t;
 typedef tree8x64_s       type_tree_s;
@@ -38,83 +46,20 @@ typedef tree8x64_s       type_tree_s;
 #define types_lookup       tree8x64_lookup
 #define types_lookup_add   tree8x64_lookup_add
 
-#define _SIZE_SHIFT 16
-#define _DISK_SHIFT 8
-#define _TYPE_SHIFT 0
-
-#define _SIZE_MASK 0xFFFFFFFFFFFFULL
-#define _DISK_MASK 0xFFU
-#define _TYPE_MASK 0xFFU
-
 typedef struct song_s {
     u64 start;
-    u64 sdt;
+    u64 size:48,
+        disk:8,
+        type:8;
 } song_s;
-
-static inline size_t song_size (const song_s* const song) {
-
-    return (song->sdt >> _SIZE_SHIFT) & _SIZE_MASK;
-}
-
-static inline size_t song_disk (const song_s* const song) {
-
-    return (song->sdt >> _DISK_SHIFT) & _DISK_MASK;
-}
-
-static inline size_t song_type (const song_s* const song) {
-
-    return (song->sdt >> _TYPE_SHIFT) & _TYPE_MASK;
-}
-
-static inline off_t song_start (const song_s* const song) {
-
-    return song->start;
-}
 
 static inline off_t song_end (const song_s* const song) {
 
-    return song->start + song_size(song);
-}
-
-static inline int song_fd (const song_s* const song) {
-
-    return song_disk(song);
-}
-
-static inline void song_set_disk (song_s* const song, const size_t diskID) {
-
-    ASSERT(diskID <= DISK_ID_MAX);
-
-    song->sdt &= ~(_DISK_MASK << _DISK_SHIFT);
-    song->sdt |= (u64)diskID << _DISK_SHIFT;
-}
-
-static inline void song_set (song_s* const song,
-    const size_t diskID,
-    const off_t start,
-    const size_t size,
-    const size_t typeID) {
-
-    ASSERT(((SONG_SIZE_MAX << _SIZE_SHIFT) >> _SIZE_SHIFT) == SONG_SIZE_MAX);
-
-    ASSERT(SONG_SIZE_MAX <= _SIZE_MASK);
-    ASSERT(DISK_ID_MAX   <= _DISK_MASK);
-    ASSERT(TYPE_ID_MAX   <= _TYPE_MASK);
-
-    ASSERT(size   <= SONG_SIZE_MAX);
-    ASSERT(diskID <= DISK_ID_MAX);
-    ASSERT(typeID <= TYPE_ID_MAX);
-
-    song->start = start;
-    song->sdt = ((u64)size   << _SIZE_SHIFT)
-              | ((u64)diskID << _DISK_SHIFT)
-              | ((u64)typeID << _TYPE_SHIFT);
+    return song->start + song->size;
 }
 
 //
-#define DISK_HASH(i) (db->disksTree[i+1].hash[0])
 #define SONG_HASH(i) (db->songsTree[i+1].hash[0])
-#define TYPE_HASH(i) (db->typesTree[i+1].hash[0])
 
 // DATABASE
 #define MZK_MAGIC 0x57494c4552494b41ULL
@@ -122,16 +67,15 @@ static inline void song_set (song_s* const song,
 #define MZK_REVISION 0
 
 // DEIXA UM PARA O \0
-#define MZK_TYPE_LEN (sizeof(u64) - 1)
+#define MZK_TYPE_LEN 7
 
 typedef struct db_verify_s {
-    disk_tree_s diskTree;
     song_tree_s songTree;
-    type_tree_s typeTree;
-    disk_hash_t diskHash;
     song_hash_t songHash;
-    type_hash_t typeHash;
     song_s      song;
+    u8 disksN;
+    u8 typesN;
+    u8 songsN;
 } db_verify_s;
 
 typedef struct db_s {
@@ -141,23 +85,23 @@ typedef struct db_s {
     u64 checksum;
     size_t size; // OF THIS ENTIRE FILE
     time_t time;
-    disk_tree_s disksTree[DISKS_N + 1];
+    u16 typesN;
+    u16 disksN;
+    u32 disks[DISKS_N][2]; // MAJOR, MINOR
+    char types[TYPES_N][MZK_TYPE_LEN];
     song_tree_s songsTree[SONGS_N + 1];
-    type_tree_s typesTree[TYPES_N + 1];
     song_s songs[SONGS_N];
     db_verify_s verify;
 } db_s;
 
 static const db_verify_s verify = {
-    .diskTree = { .count = 0, .size = 1, .childs = { 0, 1 }, },
     .songTree = { .count = 0, .size = 1, .childs = { 0, 1 }, },
-    .typeTree = { .count = 0, .size = 1, .childs = { 0, 1 }, },
-    .diskHash = 3,
     .songHash = 6,
-    .typeHash = 6,
     .song = {
-        .start = 0x5656465,
-        .sdt = 0x546450465,
+        .disk = 0x13,
+        .start = 0x546450465,
+        .size = 0x3423432,
+        .type = 0x45,
     }
 };
 
@@ -214,7 +158,7 @@ static inline u64 fpath_type (const char* fpath) {
 }
 
 static inline u64 fname_code (const char* fname) {
-    
+
     u64 mult = 1;
     u64 code = 0;
 
@@ -289,9 +233,9 @@ static int mzk_load (const char* const dbPath) {
         goto _err_close;
     }
 
-    mzk_log("LOAD: DISKS: %zu", (size_t)db->disksTree->count);
+    mzk_log("LOAD: DISKS: %zu", (size_t)db->disksN);
+    mzk_log("LOAD: TYPES: %zu", (size_t)db->typesN);
     mzk_log("LOAD: SONGS: %zu", (size_t)db->songsTree->count);
-    mzk_log("LOAD: TYPES: %zu", (size_t)db->typesTree->count);
 
     if (db->magic != MZK_MAGIC) {
         mzk_err("LOAD: BAD MAGIC: 0x%016llX", (uintll)db->magic);
@@ -311,9 +255,13 @@ static int mzk_load (const char* const dbPath) {
         goto _err_close;
     }
 
-    if (db->disksTree->size  != DISKS_N
-     || db->disksTree->count >= DISKS_N) {
-        mzk_err("LOAD: BAD DISKS COUNT/SIZE");
+    if (db->disksN >= DISKS_N) {
+        mzk_err("LOAD: BAD DISKS COUNT");
+        goto _err_close;
+    }
+
+    if (db->typesN >= TYPES_N) {
+        mzk_err("LOAD: BAD TYPES COUNT");
         goto _err_close;
     }
 
@@ -323,41 +271,28 @@ static int mzk_load (const char* const dbPath) {
         goto _err_close;
     }
 
-    if (db->typesTree->size  != TYPES_N
-     || db->typesTree->count >= TYPES_N) {
-        mzk_err("LOAD: BAD TYPES COUNT/SIZE");
-        goto _err_close;
-    }
-
     // VERIFY SONGS
     foreach (size_t, i, db->songsTree->count) {
 
         song_s* const song = &db->songs[i];
 
-        const off_t  start = song_start(song);
-        const size_t size  = song_size (song);
-        const size_t disk  = song_disk (song);
-        const size_t type  = song_type (song);
-
-        if (disk >= db->disksTree->count)
+        if (song->disk >= db->disksN)
             mzk_err("SONG HAS INVALID DISK");
-        if (type >= db->typesTree->count)
-            mzk_err("SONG HAS INVALID TYPE");
-        if (start == 0)
+        if (song->start == 0)
             mzk_err("SONG HAS INVALID START");
-        if (size >= SONG_SIZE_MAX)
+        if (song->size >= SONG_SIZE_MAX)
             mzk_err("SONG HAS INVALID SIZE");
+        if (song->type >= db->typesN)
+            mzk_err("SONG HAS INVALID TYPE");
     }
 
-    foreach (size_t, i, db->disksTree->count) {
+    foreach (size_t, i, db->disksN) {
 
         char dpath[128];
 
-        const dev_t diskDev = DISK_HASH(i);
-
         snprintf(dpath, sizeof(dpath), "/dev/block/%u:%u",
-            (uint)major(diskDev),
-            (uint)minor(diskDev));
+            db->disks[i][0],
+            db->disks[i][1]);
 
         mzk_log("LOAD: OPENING DISK #%zu AT %s...", i, dpath);
 
@@ -374,19 +309,6 @@ static int mzk_load (const char* const dbPath) {
         }
 
         mzk_log("LOAD: DISK SIZE: %zu", (size_t)lseek(fd, 0, SEEK_CUR));
-
-#if 0 // TODO: HIGHEST OFFSET
-        if (lseek(fd, sizeof(*db), SEEK_SET) != sizeof(*db)) {
-            mzk_err("LOAD: FAILED TO SEEK DATABASE: %s", strerror(errno));
-            goto _failed_close;
-        }
-
-        // MAP_HUGETLB | MAP_HUGE_2MB
-        if (mmap(db, sizeof(*db), PROT_READ, MAP_SHARED | MAP_FIXED | MAP_POPULATE, fd, 0) != db) {
-            mzk_err("LOAD: FAILED TO MAP DATABASE: %s", strerror(errno));
-            goto _failed_close;
-        }
-#endif
 
         fds[i] = fd;
 
