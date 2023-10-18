@@ -45,6 +45,8 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
     st->st_atime  = 0; // TODO: FIXME: CREATION TIME?
     st->st_mtime  = 0;
     st->st_ctime  = 0;
+    st->st_dev    = 0;
+    st->st_rdev   = 0;
     st->st_mode   = S_IFREG | 0444;
     st->st_size   = song->size;
     st->st_nlink  = 1;
