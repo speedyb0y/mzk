@@ -79,17 +79,17 @@ static int do_readdir (const char* fpath, void *buffer, fuse_fill_dir_t filler, 
         const song_s* const song = &db->songs[sid];
 
         const stat_s stat = {
-            st.st_ino    = sid,
-            st.st_uid    = 0,
-            st.st_gid    = 0,
-            st.st_atime  = 0, // TODO: FIXME: CREATION TIME?
-            st.st_mtime  = 0,
-            st.st_ctime  = 0,
-            st.st_mode   = S_IFREG | 0444,
-            st.st_size   = song->size,
-            st.st_nlink  = 1,
-            st.st_blksize = 65536,
-            st.st_blocks = (song->size + 65536 - 1)/65536, // TODO:
+            .st_ino    = sid,
+            .st_uid    = 0,
+            .st_gid    = 0,
+            .st_atime  = 0, // TODO: FIXME: CREATION TIME?
+            .st_mtime  = 0,
+            .st_ctime  = 0,
+            .st_mode   = S_IFREG | 0444,
+            .st_size   = song->size,
+            .st_nlink  = 1,
+            .st_blksize = 65536,
+            .st_blocks = (song->size + 65536 - 1)/65536, // TODO:
         };
 
         filler(buffer, "NOME DO ARQUIVOOOOOOOOOO", &stat, 0);
