@@ -343,6 +343,8 @@ _next_partition:
 
         start = strtoull(value, NULL, 10) * 512;
 
+        mzk_dbg("%s -> %s -> %zu", dpath, value, start);
+
         goto _use_disk;
 
 _use_part: // THE DISK IS THE PARTITION ITSELF

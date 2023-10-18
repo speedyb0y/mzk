@@ -74,7 +74,10 @@ static DB_FILE* mzk_open (const char* fpath) {
         file->end      = song->start + song->size;
     }
 
-    mzk_dbg("OPEN FILE: ID %zu FD %d START %zu POS %zu END %zu", fpath, sid, file->fd,
+    mzk_dbg("OPEN FILE: ID %zu FD %d DISK #%llu /dev/block/%u:%u START %zu POS %zu END %zu", sid, file->fd,
+		(uintll)song->disk,
+		db->disks[song->disk][0],
+		db->disks[song->disk][1],
 		(size_t)file->start,
 		(size_t)file->pos,
 		(size_t)file->end);
@@ -104,13 +107,10 @@ static size_t mzk_read (void* buff, size_t size, size_t qnt, DB_FILE* dfile) {
 
     //
     while (size) {
-
         const ssize_t c = pread(file->fd, buff, size, pos);
-
         // TODO: fread() does not distinguish between end-of-file and error, and callers must use feof(3) and ferror(3) to determine which occurred.
         if (c <= 0)
             return 0;
-
         pos  += c;
         buff += c;
         size -= c;
@@ -347,8 +347,8 @@ DB_plugin_t* vfs_mzk_load (DB_functions_t *api) {
     }
 
     deadbeef = api;
-
+#if 0
     api->thread_start(mzk_thread, "contexto");
-
+#endif
     return DB_PLUGIN(&plugin);
 }

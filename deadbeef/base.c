@@ -3,6 +3,7 @@
 
 #define _GNU_SOURCE 1
 
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>

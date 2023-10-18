@@ -1,12 +1,12 @@
 
 #ifndef MZK_DEBUG
-#define MZK_DEBUG 1
+#define MZK_DEBUG 0
 #endif
 
 #define SONGS_N 500000
-#define DISKS_N 250
+#define DISKS_N 255
 #define PARTS_N DISKS_N
-#define TYPES_N 32
+#define TYPES_N 128
 
 #define SONG_SIZE_MAX (32ULL*1024*1024*1024)
 
@@ -23,7 +23,6 @@ typedef tree32x64_s       song_tree_s;
 typedef tree8x64_hash_t  disk_hash_t;
 typedef tree8x64_s       disk_tree_s;
 #define disks_new          tree8x64_new
-#define disks_add_multiple tree8x64_add_multiple
 #define disks_add_single   tree8x64_add_single
 #define disks_lookup       tree8x64_lookup
 #define disks_lookup_add   tree8x64_lookup_add
@@ -32,7 +31,6 @@ typedef tree8x64_s       disk_tree_s;
 typedef tree8x64_hash_t  part_hash_t;
 typedef tree8x64_s       part_tree_s;
 #define parts_new          tree8x64_new
-#define parts_add_multiple tree8x64_add_multiple
 #define parts_add_single   tree8x64_add_single
 #define parts_lookup       tree8x64_lookup
 #define parts_lookup_add   tree8x64_lookup_add
@@ -41,7 +39,6 @@ typedef tree8x64_s       part_tree_s;
 typedef tree8x64_hash_t  type_hash_t;
 typedef tree8x64_s       type_tree_s;
 #define types_new          tree8x64_new
-#define types_add_multiple tree8x64_add_multiple
 #define types_add_single   tree8x64_add_single
 #define types_lookup       tree8x64_lookup
 #define types_lookup_add   tree8x64_lookup_add
@@ -80,7 +77,7 @@ typedef struct db_s {
     u16 typesN;
     u16 disksN;
     u32 disks[DISKS_N][2]; // MAJOR, MINOR
-    char types[TYPES_N][MZK_TYPE_LEN];
+    char types[TYPES_N][MZK_TYPE_LEN + 1];
     song_tree_s songsTree[SONGS_N + 1];
     song_s songs[SONGS_N];
     db_verify_s verify;
@@ -89,12 +86,12 @@ typedef struct db_s {
 static const db_verify_s verify = {
     .songTree = { .count = 0, .size = 1, .childs = { 0, 1 }, },
     .songHash = 6,
-    .song = {
+    .song = {        
+        .start = 0x5464500465ULL,
+        .size = 0x3423432ULL,
         .disk = 0x13,
-        .start = 0x546450465,
-        .size = 0x3423432,
         .type = 0x45,
-    }
+    }   
 };
 
 #if !MZK_DEBUG
@@ -265,8 +262,8 @@ static int mzk_load (const char* const dbPath) {
 
         song_s* const song = &db->songs[songID];
         
-		if (1)
-			mzk_dbg("SONG #%zu PART %u START %zu SIZE %zu", songID,
+		if (0)
+			mzk_dbg("SONG #%zu DISK %u START %zu SIZE %zu", songID,
 				  (uint)song->disk,
 				(size_t)song->start,
 				(size_t)song->size);
@@ -304,6 +301,7 @@ static int mzk_load (const char* const dbPath) {
         }
 
         mzk_log("LOAD: DISK SIZE: %zu", (size_t)lseek(fd, 0, SEEK_CUR));
+        mzk_log("LOAD: DISK FD: %d", fd);
 
         fds[i] = fd;
 
