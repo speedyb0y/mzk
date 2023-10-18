@@ -212,12 +212,12 @@ int main (int argsN, char* args[]) {
             const u64 type = fpath_type(fname);
 
             if (!code) {
-                mzk_err("BAD NAME FOR FILE %s", fpath);
+                mzk_err("FILE %s: BAD NAME", fpath);
                 continue;
             }
 
             if (!type) {
-                mzk_err("BAD TYPE FOR FILE %s", fpath);
+                mzk_err("FILE %s: BAD TYPE", fpath);
                 continue;
             }
 
@@ -225,7 +225,7 @@ int main (int argsN, char* args[]) {
             struct stat st;
 
             if (fstat(fd, &st)) {
-                mzk_err("FAILED TO STAT FILE %s: %s", fpath, strerror(errno));
+                mzk_err("FILE %s: FAILED TO STAT: %s", fpath, strerror(errno));
                 close(fd);
                 continue;
             }
@@ -234,7 +234,7 @@ int main (int argsN, char* args[]) {
             u64 songBlks = 0;
 
             if (ioctl(fd, FIBMAP, &songBlks) == -1 || songBlks == 0) {
-                mzk_err("FAILED TO FIBMAP FILE %s: %s", fpath, strerror(errno));
+                mzk_err("FILE %s: FAILED TO FIBMAP: %s", fpath, strerror(errno));
                 close(fd);
                 continue;
             }
@@ -243,13 +243,13 @@ int main (int argsN, char* args[]) {
 
             // IGNORE EMPTY FILES
             if (st.st_size == 0) {
-                mzk_warn("IGNORING EMPTY FILE %s", fpath);
+                mzk_warn("FILE %s: IGNORING (EMPTY)", fpath);
                 continue;
             }
 
             //
             if (st.st_dev != partDev) {
-                mzk_err("FILE DEV IS NOT DIR DEV: %s", fpath);
+                mzk_err("FILE %s: DEV IS NOT DIR DEV", fpath);
                 continue;
             }
 
