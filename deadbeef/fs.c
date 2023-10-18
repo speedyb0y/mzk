@@ -9,7 +9,7 @@
 #include "core.c"
 
 //
-#define FUSE_USE_VERSION 30
+#define FUSE_USE_VERSION 29
 #include <fuse.h>
 
 typedef struct stat stat_s;
