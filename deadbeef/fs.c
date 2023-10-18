@@ -152,7 +152,7 @@ static int do_open (const char* const fpath, fuse_file_info_s* const finfo) {
     return 0;
 }
 
-static int do_read(const char *fpath, char *buffer, size_t size, off_t offset, struct fuse_file_info *finfo) {
+static int do_read(const char *fpath, char *buffer, size_t size, off_t offset, fuse_file_info_s *finfo) {
 
     const size_t sid = finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fpath_code(fpath)) : SONGS_N;
 
