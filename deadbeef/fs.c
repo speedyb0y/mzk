@@ -77,7 +77,7 @@ static int do_readdir (const char* fpath, void* buffer, fuse_fill_dir_t filler, 
 
     (void)offset;
 
-    const size_t sid = finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fpath_code(fpath)) : SONGS_N;
+    const size_t sid = get_sid(fpath, finfo);
 
     if (sid != SONGS_N)
         return -ENOTDIR;
@@ -163,7 +163,7 @@ static int do_open (const char* const fpath, fuse_file_info_s* const finfo) {
 
 static int do_read(const char *fpath, char *buffer, size_t size, off_t offset, fuse_file_info_s *finfo) {
 
-    const size_t sid = finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fpath_code(fpath)) : SONGS_N;
+    const size_t sid = get_sid(fpath, finfo);
 
     // TODO: fh SONGS_N É O ROOT DIR
     if (sid >= SONGS_N)
