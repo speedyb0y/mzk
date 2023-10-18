@@ -57,7 +57,7 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
 static int do_opendir (const char* fpath, struct fuse_file_info* fi) {
 
     if (strcmp(fpath, "/" ))
-        return -ENOTDIR;
+        return songs_lookup(db->songsTree, fpath_code(fpath)) < SONGS_N ? -ENOTDIR : -ENOENT;
 
     fi->fh = SONGS_N;
 
