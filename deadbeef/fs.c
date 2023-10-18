@@ -34,6 +34,7 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
         // ROOT
         st->st_mode  = S_IFDIR | 0555;
         st->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
+        st->st_blocks = 1;
     
     } else {
         //
@@ -42,7 +43,6 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
         st->st_mode    = S_IFREG | 0444;
         st->st_size    = song->size;
         st->st_nlink   = 1;
-        st->st_blksize = 65536;
         st->st_blocks  = (song->size + 65536 - 1)/65536; // TODO:
     }
 
@@ -54,7 +54,8 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
     st->st_atime  = 0; // TODO: FIXME: CREATION TIME?
     st->st_mtime  = 0;
     st->st_ctime  = 0;
-    
+    st->st_blksize = 65536;    
+
     return 0;
 }
 
