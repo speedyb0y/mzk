@@ -66,6 +66,8 @@ static int do_opendir (const char* fpath, struct fuse_file_info* fi) {
 
 static int do_readdir (const char* fpath, void *buffer, fuse_fill_dir_t filler, off_t offset, fuse_file_info_s* finfo) {
 
+    (void)offset;
+
     const size_t sid = finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fpath_code(fpath)) : SONGS_N;
 
     if (sid != SONGS_N)
