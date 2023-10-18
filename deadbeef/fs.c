@@ -41,8 +41,8 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
         const song_s* const song = &db->songs[sid];
 
         st->st_mode    = S_IFREG | 0444;
-        st->st_size    = song->size;
         st->st_nlink   = 1;
+        st->st_size    =  song->size;
         st->st_blocks  = (song->size + 65536 - 1)/65536; // TODO:
     }
 
@@ -59,10 +59,10 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
     return 0;
 }
 
-static int do_opendir (const char* fpath, struct fuse_file_info* fi) {
+static int do_opendir (const char* fpath, fuse_file_info_s* fi) {
 
     if (strcmp(fpath, "/" ))
-        return songs_lookup(db->songsTree, fpath_code(fpath)) < SONGS_N ? -ENOTDIR : -ENOENT;
+        return songs_lookup(db->songsTree, fname_code(fpath + 1)) < SONGS_N ? -ENOTDIR : -ENOENT;
 
     fi->fh = SONGS_N;
 
@@ -122,7 +122,7 @@ static int do_mknod (const char *path, mode_t mode, dev_t rdev) {
     return -EROFS;
 }
 
-static int do_write (const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *info) {
+static int do_write (const char *path, const char *buffer, size_t size, off_t offset, fuse_file_info_s *info) {
 
     (void)path;
     (void)buffer;
