@@ -94,7 +94,7 @@ static int do_readdir (const char* fpath, void* buffer, fuse_fill_dir_t filler, 
         const stat_s stat = {
             .st_ino     = sid,
             .st_dev     = 0,
-            .st_redev   = 0,
+            .st_rdev    = 0,
             .st_uid     = 0,
             .st_gid     = 0,
             .st_atime   = 0, // TODO: FIXME: CREATION TIME?
