@@ -59,7 +59,7 @@ static int do_getattr (const char* fpath, stat_s* st, fuse_file_info_s* finfo) {
     return 0;
 }
 
-static int do_opendir (const char* fpath, fuse_file_info_s* fi) {
+static int do_opendir (const char* fpath, fuse_file_info_s* finfo) {
 
     if (fpath == NULL)
         return -1;
@@ -68,7 +68,7 @@ static int do_opendir (const char* fpath, fuse_file_info_s* fi) {
             fpath++;
 
     if (*fpath == '\0') {
-        fi->fh = SONGS_N;
+        finfo->fh = SONGS_N;
         return 0;
     }
 
@@ -93,6 +93,8 @@ static int do_readdir (const char* fpath, void* buffer, fuse_fill_dir_t filler, 
 
         const stat_s stat = {
             .st_ino     = sid,
+            .st_dev     = 0,
+            .st_redev   = 0,
             .st_uid     = 0,
             .st_gid     = 0,
             .st_atime   = 0, // TODO: FIXME: CREATION TIME?
@@ -168,8 +170,11 @@ static int do_read(const char *fpath, char *buffer, size_t size, off_t offset, f
     const size_t sid = get_sid(fpath, finfo);
 
     // TODO: fh SONGS_N É O ROOT DIR
-    if (sid >= SONGS_N)
+    if (sid > SONGS_N)
         return -ENOENT;
+
+    if if (sid == SONGS_N)
+        return -1;
     
     const song_s* const song = &db->songs[sid];
 
