@@ -185,8 +185,10 @@ static int mzk_scandir (const char *dir, struct dirent ***namelist, int (*select
 			.d_type = DT_REG,
 		};
 
-        strcpy(code_to_str(SONG_HASH(i), entry.d_name),
-			(char*)&TYPE_HASH(song_type(&db->songs[i])));
+		// GERA O NOME E COLOCA A EXTENSÃO
+        strcpy(code_to_str(TREE_HASHES(db->songsTree, i)[0], entry.d_name),
+			(char*)&db->types[db->songs[i].type]
+		);
 
         if (!selector || selector(&entry))
             entries[count++] = memcpy(malloc(sizeof(entry)), &entry, sizeof(entry));

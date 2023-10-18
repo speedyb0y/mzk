@@ -58,9 +58,6 @@ static inline off_t song_end (const song_s* const song) {
     return song->start + song->size;
 }
 
-//
-#define SONG_HASH(i) (db->songsTree[i+1].hash[0])
-
 // DATABASE
 #define MZK_MAGIC 0x57494c4552494b41ULL
 #define MZK_VERSION 1
