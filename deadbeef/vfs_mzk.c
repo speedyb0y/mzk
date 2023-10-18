@@ -50,6 +50,8 @@ static DB_FILE* mzk_open (const char* fpath) {
         return NULL;
     }
 
+	const song_s* const song = &db->songs[sid];
+
     const int fd = fds[song->disk];
 
     if (fd == -1) {
@@ -63,8 +65,6 @@ static DB_FILE* mzk_open (const char* fpath) {
     if (file) {
 
         memset(&file->file, 0, sizeof(file->file));
-
-        const song_s* const song = &db->songs[sid];
 
         file->file.vfs = &plugin;
         file->id       = sid;
@@ -103,10 +103,9 @@ static size_t mzk_read (void* buff, size_t size, size_t qnt, DB_FILE* dfile) {
 
         const ssize_t c = pread(file->fd, buff, size, pos);
 
-        if (c <= 0) {
-            // TODO: fread() does not distinguish between end-of-file and error, and callers must use feof(3) and ferror(3) to determine which occurred.
+		// TODO: fread() does not distinguish between end-of-file and error, and callers must use feof(3) and ferror(3) to determine which occurred.
+        if (c <= 0)
             return 0;
-        }
 
         pos  += c;
         buff += c;
