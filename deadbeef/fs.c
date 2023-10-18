@@ -71,7 +71,7 @@ static int do_readdir( const char* path, void *buffer, fuse_fill_dir_t filler, o
         filler(buffer, ".",  NULL, 0);
         filler(buffer, "..", NULL, 0);
 
-        foreach (size_t, sid, db->songsTree.count) {
+        foreach (size_t, sid, db->songsTree->count) {
 
             const song_s* const song = &db->songs[sid];
 
