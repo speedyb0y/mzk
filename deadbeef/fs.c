@@ -66,36 +66,36 @@ static int do_opendir (const char* fpath, struct fuse_file_info* fi) {
 
 static int do_readdir( const char* path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi) {
 
-    if (fi->fh == 0) {
+    const size_t sid = finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fpath_code(fpath)) : SONGS_N;
 
-        filler(buffer, ".",  NULL, 0);
-        filler(buffer, "..", NULL, 0);
+    if (sid != SONGS_N)
+        return -1;
 
-        foreach (size_t, sid, db->songsTree->count) {
+    filler(buffer, ".",  NULL, 0);
+    filler(buffer, "..", NULL, 0);
 
-            const song_s* const song = &db->songs[sid];
+    foreach (size_t, sid, db->songsTree->count) {
 
-            const stat_s stat = {
-                st.st_ino    = sid,
-                st.st_uid    = 0,
-                st.st_gid    = 0,
-                st.st_atime  = 0, // TODO: FIXME: CREATION TIME?
-                st.st_mtime  = 0,
-                st.st_ctime  = 0,
-                st.st_mode   = S_IFREG | 0444,
-                st.st_size   = song->size,
-                st.st_nlink  = 1,
-                st.st_blksize = 65536,
-                st.st_blocks = (song->size + 65536 - 1)/65536, // TODO:
-            };
+        const song_s* const song = &db->songs[sid];
 
-            filler(buffer, "NOME DO ARQUIVOOOOOOOOOO", &stat, 0);
-        }
+        const stat_s stat = {
+            st.st_ino    = sid,
+            st.st_uid    = 0,
+            st.st_gid    = 0,
+            st.st_atime  = 0, // TODO: FIXME: CREATION TIME?
+            st.st_mtime  = 0,
+            st.st_ctime  = 0,
+            st.st_mode   = S_IFREG | 0444,
+            st.st_size   = song->size,
+            st.st_nlink  = 1,
+            st.st_blksize = 65536,
+            st.st_blocks = (song->size + 65536 - 1)/65536, // TODO:
+        };
 
-        return 0;
+        filler(buffer, "NOME DO ARQUIVOOOOOOOOOO", &stat, 0);
     }
 
-    return -1;
+    return 0;
 }
 
 static int do_mkdir (const char *path, mode_t mode) {
