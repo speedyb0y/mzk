@@ -16,10 +16,18 @@ typedef struct stat stat_s;
 
 typedef struct fuse_file_info fuse_file_info_s;
 
+static inline size_t get_sid (const char* fpath, fuse_file_info_s* finfo) {
+
+    return finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fpath_code(fpath)) : SONGS_N;
+}
+
 static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* finfo) {
 
     //
-    const size_t sid = finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fpath_code(fpath)) : SONGS_N;
+    const size_t sid = get_sid(fpath, info);
+
+    if (sid > SONGS_N)
+        return -ENOENT;
 
     // ROOT
     if (sid == SONGS_N) {
@@ -32,9 +40,6 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
         st->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
         return 0;
     }
-
-    if (sid >= SONGS_N)
-        return -ENOENT;
 
     const song_s* const song = &db->songs[sid];
 
