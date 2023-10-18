@@ -53,12 +53,12 @@ static int do_getattr (const char* fpath, struct stat *st) {
     return 0;
 }
 
-static int do_opendir (const char* path, struct fuse_file_info* fi) {
+static int do_opendir (const char* fpath, struct fuse_file_info* fi) {
 
-    if (strcmp(path, "/" ) != 0)
-        return -1;
+    if (strcmp(fpath, "/" ))
+        return -ENOTDIR;
 
-    fi->fh = 0;
+    fi->fh = SONGS_N;
 
     return 0;
 }
@@ -70,25 +70,25 @@ static int do_readdir( const char* path, void *buffer, fuse_fill_dir_t filler, o
         filler(buffer, ".",  NULL, 0);
         filler(buffer, "..", NULL, 0);
 
-        for (int i = 1; i != myFilesN; i++) {
+        foreach (size_t, sid, db->songsTree.count) {
 
-            const file_entry_s* const mf = &myFiles[i];
+            const song_s* const song = &db->songs[sid];
 
             const stat_s stat = {
-                .st_ino    = i,
-                .st_uid    = mf->uid,
-                .st_gid    = mf->gid,
-                .st_atime  = mf->mtime, // TODO: FIXME: CREATION TIME?
-                .st_mtime  = mf->mtime,
-                .st_ctime  = mf->mtime,
-                .st_mode   = mf->mode | S_IFREG,
-                .st_size   = mf->size,
-				.st_blksize = 65536,
-				.st_blocks = 0, // TODO:
-                .st_nlink  = 1,
+                st.st_ino    = sid,
+                st.st_uid    = 0,
+                st.st_gid    = 0,
+                st.st_atime  = 0, // TODO: FIXME: CREATION TIME?
+                st.st_mtime  = 0,
+                st.st_ctime  = 0,
+                st.st_mode   = S_IFREG | 0444,
+                st.st_size   = song->size,
+                st.st_nlink  = 1,
+                st.st_blksize = 65536,
+                st.st_blocks = (song->size + 65536 - 1)/65536, // TODO:
             };
 
-            filler(buffer, mf->name, &stat, 0);
+            filler(buffer, "NOME DO ARQUIVOOOOOOOOOO", &stat, 0);
         }
 
         return 0;
