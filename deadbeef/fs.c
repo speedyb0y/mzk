@@ -18,7 +18,7 @@ typedef struct fuse_file_info fuse_file_info_s;
 
 static inline size_t get_sid (const char* fpath, fuse_file_info_s* finfo) {
 
-    return finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fpath_code(fpath)) : SONGS_N;
+    return finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fname_code(fpath + 1)) : SONGS_N;
 }
 
 static int do_getattr (const char* fpath, stat_s* st, fuse_file_info_s* finfo) {
@@ -61,15 +61,18 @@ static int do_getattr (const char* fpath, stat_s* st, fuse_file_info_s* finfo) {
 
 static int do_opendir (const char* fpath, fuse_file_info_s* fi) {
 
-    if (fpath == NULL || fpath[0] != '/')
+    if (fpath == NULL)
         return -1;
 
-    if (fpath[1] == '\0') {
+    while (*fpath == '/')
+            fpath++;
+
+    if (*fpath == '\0') {
         fi->fh = SONGS_N;
         return 0;
     }
 
-    return songs_lookup(db->songsTree, fname_code(fpath + 1)) < SONGS_N ? -ENOTDIR : -ENOENT;
+    return songs_lookup(db->songsTree, fname_code(fpath)) < SONGS_N ? -ENOTDIR : -ENOENT;
 }
 
 static int do_readdir (const char* fpath, void* buffer, fuse_fill_dir_t filler, off_t offset, fuse_file_info_s* finfo) {
