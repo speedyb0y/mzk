@@ -101,7 +101,7 @@ int main (int argsN, char* args[]) {
 	}
 
 	// CONFIRM IT IS A DIRECTORY
-	if (!S_ISDIR(st.st_dev)) {
+	if (!S_ISDIR(st.st_mode)) {
 		mzk_err("MZK DIRECTORY %s: NOT A DIRECTORY", mPath);
         return 1;
 	}
@@ -121,67 +121,76 @@ int main (int argsN, char* args[]) {
 
     while ((mentry = readdir(mdir))) {
 
-        const char* const label = mentry->d_name;
+        const char* const pName = mentry->d_name;
 
         // SKIP . AND ..
-        if (label[0] == '.')
+        if (pName[0] == '.')
             continue;
 
-		char pPath[512]; snprintf(pPath, sizeof(pPath), "%s%s/", mPath, label);
+		char pPath[512]; snprintf(pPath, sizeof(pPath), "%s%s/", mPath, pName);
 
 		mzk_log("PARTITION DIRECTORY %s", pPath);
 
         //
-        const int dfd = openat(mfd, pPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
+        const int pfd = openat(mfd, pPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
 
-        if (dfd == -1) {
+        if (pfd == -1) {
             mzk_err("PARTITION DIRECTORY %s: FAILED TO OPEN: %s", pPath, strerror(errno));
             continue;
         }
 
-        DIR* const dir = fdopendir(dfd);
+        DIR* const pdir = fdopendir(pfd);
 
-        if (dir == NULL) {
+        if (pdir == NULL) {
             mzk_err("PARTITION DIRECTORY %s: FAILED TO OPEN: %s", pPath, strerror(errno));
-            goto _next_dir;
+            close(pfd);
+            continue;
         }
 
         //
         struct stat st;
 
-        if (fstat(dfd, &st)) {
+        if (fstat(pfd, &st)) {
             mzk_err("PARTITION DIRECTORY %s: FAILED TO STAT: %s", pPath, strerror(errno));
-            goto _next_dir;
+            goto _next_partition;
         }
 
-        //
-        off_t partBlk = 0;
-
-        if (ioctl(dfd, FIGETBSZ, &partBlk) == -1 || partBlk == 0)  {
-            mzk_err("PARTITION DIRECTORY %s: FAILED TO FIGETBSZ: %s", pPath, strerror(errno));
-            goto _next_dir;
-        }
+		// CONFIRM IT IS A DIRECTORY
+		if (!S_ISDIR(st.st_mode)) {
+			mzk_err("PARTITION DIRECTORY %s: NOT A DIRECTORY", mPath);
+			goto _next_partition;
+		}
 
         //
         const dev_t partDev = st.st_dev;
 
         if (partDev == mDev) {
 			mzk_log("PARTITION DIRECTORY %s: SKIPPING (NOT MOUNTED)", pPath);
-            goto _next_dir;
+            goto _next_partition;
 		}
 
+		//
         ASSERT(sizeof(partDev) <= sizeof(part_hash_t));
 
-        const size_t partID = parts_lookup_add(partsTree, partDev);
+        const size_t partID = parts_add_single(partsTree, partDev);
 
         if (partID >= PARTS_N) {
-            mzk_err("FAILED TO REGISTER PARTITION");
-            goto _next_dir;
+			mzk_log("PARTITION DIRECTORY %s: FAILED TO REGISTER (DUPLICATED?)", pPath);
+            goto _next_partition;
+        }
+        
+        //
+        off_t partBlk = 0;
+
+        if (ioctl(pfd, FIGETBSZ, &partBlk) == -1 || partBlk == 0)  {
+            mzk_err("PARTITION DIRECTORY %s: FAILED TO FIGETBSZ: %s", pPath, strerror(errno));
+            goto _next_partition;
         }
 
+		// SEE ALL FILES IN THE PARTITION
         struct dirent* dentry;
 
-        while ((dentry = readdir(dir))) {
+        while ((dentry = readdir(pdir))) {
 
             char* const fname = dentry->d_name;
 
@@ -192,7 +201,7 @@ int main (int argsN, char* args[]) {
             //
             char fpath[1024]; snprintf(fpath, sizeof(fpath), "%s%s", pPath, fname);
 
-            const int fd = openat(dfd, fname, O_RDONLY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
+            const int fd = openat(pfd, fname, O_RDONLY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
 
             if (fd == -1) {
                 mzk_err("FAILED TO OPEN FILE %s: %s", fpath, strerror(errno));
@@ -278,8 +287,8 @@ int main (int argsN, char* args[]) {
             song->type  = typeID;
         }
 
-_next_dir:
-        closedir(dir);
+_next_partition:
+        closedir(pdir);
     }
 
     closedir(mdir);
