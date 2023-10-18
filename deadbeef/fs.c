@@ -107,7 +107,14 @@ static int do_readdir (const char* fpath, void* buffer, fuse_fill_dir_t filler, 
             .st_blocks  = (song->size + 65536 - 1)/65536, // TODO:
         };
 
-        filler(buffer, "NOME DO ARQUIVOOOOOOOOOO", &stat, 0);
+        char fname[32];
+
+        // GERA O NOME E COLOCA A EXTENSÃO
+        strcpy(code_to_str(TREE_HASHES(db->songsTree, sid)[0], fname),
+            (char*)&db->types[db->songs[sid].type]
+        );
+        
+        filler(buffer, fnae, &stat, 0);
     }
 
     return 0;
