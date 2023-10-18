@@ -27,10 +27,12 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
     const size_t sid = get_sid(fpath, finfo);
 
     if (sid > SONGS_N)
+        //
         return -ENOENT;
-
-    // ROOT
+    
     if (sid == SONGS_N) {
+        // ROOT
+
         st->st_ino = 0;
         st->st_uid = 0;
         st->st_gid = 0;
@@ -38,25 +40,25 @@ static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* fin
         st->st_mtime = 0;
         st->st_mode = S_IFDIR | 0755;
         st->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
-        return 0;
+    
+    } else {
+        //
+        const song_s* const song = &db->songs[sid];
+
+        st->st_ino    = sid;
+        st->st_uid    = 0;
+        st->st_gid    = 0;
+        st->st_atime  = 0; // TODO: FIXME: CREATION TIME?
+        st->st_mtime  = 0;
+        st->st_ctime  = 0;
+        st->st_dev    = 0;
+        st->st_rdev   = 0;
+        st->st_mode   = S_IFREG | 0444;
+        st->st_size   = song->size;
+        st->st_nlink  = 1;
+        st->st_blksize = 65536;
+        st->st_blocks = (song->size + 65536 - 1)/65536; // TODO:
     }
-
-    const song_s* const song = &db->songs[sid];
-
-    //
-    st->st_ino    = sid;
-    st->st_uid    = 0;
-    st->st_gid    = 0;
-    st->st_atime  = 0; // TODO: FIXME: CREATION TIME?
-    st->st_mtime  = 0;
-    st->st_ctime  = 0;
-    st->st_dev    = 0;
-    st->st_rdev   = 0;
-    st->st_mode   = S_IFREG | 0444;
-    st->st_size   = song->size;
-    st->st_nlink  = 1;
-    st->st_blksize = 65536;
-    st->st_blocks = (song->size + 65536 - 1)/65536; // TODO:
 
     return 0;
 }
