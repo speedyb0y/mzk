@@ -16,12 +16,13 @@ typedef struct stat stat_s;
 
 typedef struct fuse_file_info fuse_file_info_s;
 
-static int do_getattr (const char* fpath, struct stat *st) {
+static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* finfo) {
 
-    printf("GETATTR |%s|\n", fpath);
+    //
+    const size_t sid = finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fpath_code(fpath)) : SONGS_N;
 
     // ROOT
-    if (strcmp(fpath, "/") == 0) {
+    if (sid == SONGS_N) {
         st->st_ino = 0;
         st->st_uid = 0;
         st->st_gid = 0;
@@ -32,13 +33,10 @@ static int do_getattr (const char* fpath, struct stat *st) {
         return 0;
     }
 
-    //
-    const size_t sid = songs_lookup(db->songsTree, fpath_code(fpath));   // TODO: USAR O REAL PATH :S
-
     if (sid >= SONGS_N)
         return -ENOENT;
 
-    const song_s* const song = &db->songs[finfo->fh];
+    const song_s* const song = &db->songs[sid];
 
     //
     st->st_ino    = sid;
