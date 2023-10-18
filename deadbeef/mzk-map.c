@@ -285,6 +285,12 @@ int main (int argsN, char* args[]) {
             song->start = partBlk * songBlks;
             song->size  = st.st_size;
             song->type  = typeID;
+
+			if (0)
+				mzk_dbg("SONG #%zu PART %u START %zu SIZE %zu", songID,
+ 					  (uint)song->disk,
+					(size_t)song->start,
+					(size_t)song->size);
         }
 
 _next_partition:

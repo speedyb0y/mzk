@@ -74,6 +74,10 @@ static DB_FILE* mzk_open (const char* fpath) {
         file->end      = song->start + song->size;
     }
 
+    mzk_dbg("OPEN FILE: ID %zu FD %d START %zu POS %zu END %zu", fpath, sid, file->fd,
+		(size_t)file->start,
+		(size_t)file->pos,
+		(size_t)file->end);
     return (DB_FILE*)file;
 }
 

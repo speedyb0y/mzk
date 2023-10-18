@@ -5,8 +5,8 @@
 
 #define SONGS_N 500000
 #define DISKS_N 250
-#define TYPES_N 32
 #define PARTS_N DISKS_N
+#define TYPES_N 32
 
 #define SONG_SIZE_MAX (32ULL*1024*1024*1024)
 
@@ -52,11 +52,6 @@ typedef struct song_s {
         disk:8,
         type:8;
 } song_s;
-
-static inline off_t song_end (const song_s* const song) {
-
-    return song->start + song->size;
-}
 
 // DATABASE
 #define MZK_MAGIC 0x57494c4552494b41ULL
@@ -218,7 +213,7 @@ static int mzk_load (const char* const dbPath) {
     const int fd = open(dbPath, O_RDONLY);
 
     if (fd == -1) {
-        mzk_err("LOAD: FAILED TO OPEN/CREATE DATABASE: %s", strerror(errno));
+        mzk_err("LOAD: FAILED TO OPEN DATABASE: %s", strerror(errno));
         goto _err_unmap;
     }
 
@@ -266,10 +261,16 @@ static int mzk_load (const char* const dbPath) {
     }
 
     // VERIFY SONGS
-    foreach (size_t, i, db->songsTree->count) {
+    foreach (size_t, songID, db->songsTree->count) {
 
-        song_s* const song = &db->songs[i];
-
+        song_s* const song = &db->songs[songID];
+        
+		if (1)
+			mzk_dbg("SONG #%zu PART %u START %zu SIZE %zu", songID,
+				  (uint)song->disk,
+				(size_t)song->start,
+				(size_t)song->size);
+					
         if (song->disk >= db->disksN)
             mzk_err("SONG HAS INVALID DISK");
         if (song->start == 0)
