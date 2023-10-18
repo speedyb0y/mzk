@@ -1,8 +1,11 @@
 /*
 
+    gcc $(pkg-config --libs --cflags fuse) fs.c
 */
 
 #include "base.c"
+#include "util.c"
+#include "tree.c"
 #include "core.c"
 
 //
