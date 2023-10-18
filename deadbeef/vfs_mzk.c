@@ -50,7 +50,7 @@ static DB_FILE* mzk_open (const char* fpath) {
         return NULL;
     }
 
-	const song_s* const song = &db->songs[sid];
+    const song_s* const song = &db->songs[sid];
 
     const int fd = fds[song->disk];
 
@@ -103,7 +103,7 @@ static size_t mzk_read (void* buff, size_t size, size_t qnt, DB_FILE* dfile) {
 
         const ssize_t c = pread(file->fd, buff, size, pos);
 
-		// TODO: fread() does not distinguish between end-of-file and error, and callers must use feof(3) and ferror(3) to determine which occurred.
+        // TODO: fread() does not distinguish between end-of-file and error, and callers must use feof(3) and ferror(3) to determine which occurred.
         if (c <= 0)
             return 0;
 
@@ -166,11 +166,11 @@ static void mzk_rewind (DB_FILE* dfile) {
     file->pos = file->start;
 }
 
-static int64_t mzk_getlength (DB_FILE* file) {
+static int64_t mzk_getlength (DB_FILE* dfile) {
 
-    const mzk_file_s* const mzf = PTR(file);
+    const mzk_file_s* const file = PTR(dfile);
 
-    return mzf->end - mzf->start;
+    return file->end - file->start;
 }
 
 // TODO: COLOCAR UMA FLAG NA SONG NA PRIMEIRA REPETICAO EM DIANTE
@@ -291,46 +291,37 @@ void mzk_thread (void *ctx) {
     dup2(fds[1], 80);
 
     while (1) {
-        printf("oiii\n...");
         char buff[2048];
         const int sz = read(fds[0], buff, sizeof(buff));
-
         printf("|..%d.|\n", sz);
         sleep(1);
     }
 
-        sleep(10);
-
-
-        printf("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n");
-        printf("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n");
-        printf("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n");
-        printf("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n");
-
+	//
     ddb_playlist_t* plt = deadbeef->plt_find_by_name("CONVERTED");
 
     // VE TODOS OS ARQUIVOS QUE ESTAO NA PLAYLIST ALL
     //   dai os que nao estao, adiciona
     //   reordena
 
-if (plt ){
-    // request lock for adding files to playlist
-    // returns 0 on success
-    // this function may return -1 if it is not possible to add files right now.
-    deadbeef->plt_add_files_begin (plt, 10);
+	if (plt){
+		// request lock for adding files to playlist
+		// returns 0 on success
+		// this function may return -1 if it is not possible to add files right now.
+		deadbeef->plt_add_files_begin (plt, 10);
 
-    foreach (size_t, i, db->songsTree->count) {
-        mzk_log("ADD FILE #%zu", i);
-        deadbeef->plt_add_file2 (10, plt, "/mnt/CONVERTED/U8PBvrJFKB.flac", callback, "oiii");
-        //deadbeef->plt_add_dir2 (10, plt, "/mnt/ewgewgew", callback, "huahauahua");
-        //ddb_playItem_t * (*plt_insert_file2) (int visibility, ddb_playlist_t *playlist, ddb_playItem_t *after, const char *fname, int *pabort, int (*callback)(DB_playItem_t *it, void *user_data), void *user_data);
-        //ddb_playItem_t *(*plt_insert_dir2) (int visibility, ddb_playlist_t *plt, ddb_playItem_t *after, const char *dirname, int *pabort, int (*callback)(DB_playItem_t *it, void *user_data), void *user_data);
-    }
+		foreach (size_t, i, db->songsTree->count) {
+			mzk_log("ADD FILE #%zu", i);
+			deadbeef->plt_add_file2 (10, plt, "/mnt/CONVERTED/U8PBvrJFKB.flac", callback, "oiii");
+			//deadbeef->plt_add_dir2 (10, plt, "/mnt/ewgewgew", callback, "huahauahua");
+			//ddb_playItem_t * (*plt_insert_file2) (int visibility, ddb_playlist_t *playlist, ddb_playItem_t *after, const char *fname, int *pabort, int (*callback)(DB_playItem_t *it, void *user_data), void *user_data);
+			//ddb_playItem_t *(*plt_insert_dir2) (int visibility, ddb_playlist_t *plt, ddb_playItem_t *after, const char *dirname, int *pabort, int (*callback)(DB_playItem_t *it, void *user_data), void *user_data);
+		}
 
-    deadbeef->plt_add_files_end (plt, 10);
-} else {
- printf("viiiiiiiiish\n");
-}
+		deadbeef->plt_add_files_end (plt, 10);
+	} else {
+		printf("viiiiiiiiish\n");
+	}
 
     while (1) {
 
