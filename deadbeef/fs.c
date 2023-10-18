@@ -169,21 +169,20 @@ static int do_read(const char *fpath, char *buffer, size_t size, off_t offset, f
 
     const size_t sid = get_sid(fpath, finfo);
 
-    // TODO: fh SONGS_N É O ROOT DIR
     if (sid > SONGS_N)
         return -ENOENT;
 
-    if if (sid == SONGS_N)
+    // TODO: fh SONGS_N É O ROOT DIR
+    if (sid == SONGS_N)
         return -1;
     
     const song_s* const song = &db->songs[sid];
 
     const int fd = fds[song->disk];
     
-    if (fd == -1) {
-        mzk_err("OPEN FILE: DISK NOT OPEN");
-        return -ENOENT;
-    }
+    if (fd == -1)
+        // DISK NOT OPEN
+        return -1; // TODO:
 
     return -1;
 }
