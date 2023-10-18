@@ -24,7 +24,7 @@ static inline size_t get_sid (const char* fpath, fuse_file_info_s* finfo) {
 static int do_getattr (const char* fpath, struct stat* st, fuse_file_info_s* finfo) {
 
     //
-    const size_t sid = get_sid(fpath, info);
+    const size_t sid = get_sid(fpath, finfo);
 
     if (sid > SONGS_N)
         return -ENOENT;
