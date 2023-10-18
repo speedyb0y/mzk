@@ -113,8 +113,8 @@ static inline char* code_to_str (u64 code, char* str) {
 
     code %= 0x0BA5CA5392CB0400ULL;
 
+    // THE NAME
     // ASSERT: code != 0
-    // ASSERT; code <= 0xBA5CA5392CB03FFULL
     static char alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     while (code) {
@@ -122,7 +122,7 @@ static inline char* code_to_str (u64 code, char* str) {
         code /= 62;
     }
 
-    //
+    // APPEND THE EXTENSION (WITH THE \0)
     const char* type = db->types[typeID];
 
     while ((*str = *type)) {}
