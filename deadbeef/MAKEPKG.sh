@@ -57,14 +57,14 @@ optdepends=(
     'libsm: optional dependency for gtkui session client support'
     #'libsndfile: for sndfile plugin'
     'libvorbis: for ogg vorbis plugin'
-    'libx11: for global hotkeys plugin'
-    'libzip: for vfs_zip plugin'
+    #'libx11: for global hotkeys plugin'
+    #'libzip: for vfs_zip plugin'
     #'mpg123: for MP1/MP2/MP3 playback'
     'opusfile: for opus plugin'
     #'pulseaudio: for PulseAudio output plugin'
     #'wavpack: for wavpack plugin'
     'yasm: required to build assembly portions of ffap plugin'
-    'zlib: for Audio Overload plugin (psf, psf2, etc), GME (for vgz)'
+    #'zlib: for Audio Overload plugin (psf, psf2, etc), GME (for vgz)'
 )
 
 conflicts=(deadbeef-pipewire-plugin-git)
@@ -156,9 +156,9 @@ build () {
 		-e s/vfs-ZIP/vfs-MZK/g \
 		-e s/VFS-zip/VFS-mzk/g
 
-    cp -Ra ${HOME}/vfs_mzk plugins/
+    cp -Ra ${HOME}/MUZIK/deadbeef plugins/vfs_mzk
 
-    ln -s -f -n ${HOME}/vfs_mzk/*.{c,h,sh,py} plugins/vfs_mzk/
+    ln -s -f -n ${HOME}/MUZIK/deadbeef/*.c plugins/vfs_mzk/
 
     for sc in autogen.sh configure ; do
         ./${sc} ${CONFIGURE_OPTS[*]}

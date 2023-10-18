@@ -361,6 +361,9 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: EITAAAAAAA!!!', repr(e))
             continue
 
+        if 'BINAURAL' in original.upper():
+            print(f'[{tid}] {original}: SKIPPED: BINAURAL ~~~~~~~ ~ ~ ~~  ')
+            continue
         if any('BINAURAL' in v.upper() for v in tags.values()):
             print(f'[{tid}] {original}: SKIPPED: BINAURAL')
             continue

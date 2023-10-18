@@ -1,6 +1,6 @@
 
 #ifndef MZK_DEBUG
-#define MZK_DEBUG 0
+#define MZK_DEBUG 1
 #endif
 
 #define SONGS_N 500000
@@ -183,20 +183,17 @@ static inline u64 fname_code (const char* fname) {
         mult *= 10 + 26 + 26;
     }
 
-    mzk_dbg("fname_code() -> 0x%016llX", (uintll)code);
     return code;
 }
 
 static inline u64 fpath_code (const char* fpath) {
 
-    mzk_dbg("fpath_code(%s)", fpath);
     const char* fname = fpath;
 
     while (*fpath)
         if (*fpath++ == '/')
             fname = fpath;
 
-    mzk_dbg("fpath_code() -> fname_code(%s)", fname);
     return fname_code(fname);
 }
 

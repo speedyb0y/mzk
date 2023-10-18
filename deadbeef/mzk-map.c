@@ -25,15 +25,23 @@ static int funcao_neura (const void* a, const void* b) {
             1 : -1;
 }
 
+#define MPATH_LEN 128
+
 int main (int argsN, char* args[]) {
 
     //
-    if (argsN < 2) {
+    if (argsN != 3) {
         mzk_err("BAD USAGE");
         return 1;
     }
 
     const char* const dbPath = args[1];
+    const char* const  mPath = args[2];
+
+    if (strlen(mPath) >= MPATH_LEN || mPath[strlen(mPath)-1] != '/') {
+        mzk_err("BAD MZK PATH: %s", mPath);
+        return 1;
+    }
 
     mzk_log("CREATING DATABASE FILE %s WITH SIZE %zu", dbPath, sizeof(*db));
 
@@ -74,36 +82,93 @@ int main (int argsN, char* args[]) {
     part_tree_s* const partsTree = parts_new(PARTS_N, NULL);
     type_tree_s* const typesTree = types_new(TYPES_N, NULL);
 
-    for (int i = 2; i != argsN; i++) {
+	mzk_log("MZK DIRECTORY %s", mPath);
 
-        const char* const fdir = args[i];
+    // OPEN THE MZK DIR
+    const int mfd = open(mPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
+
+    if (mfd == -1) {
+        mzk_err("MZK DIRECTORY %s: FAILED TO OPEN: %s", mPath, strerror(errno));
+        return 1;
+    }
+
+	//
+    struct stat st;
+
+    if (fstat(mfd, &st)) {
+		mzk_err("MZK DIRECTORY %s: FAILED TO STAT: %s", mPath, strerror(errno));
+        return 1;
+	}
+
+	// CONFIRM IT IS A DIRECTORY
+	if (!S_ISDIR(st.st_dev)) {
+		mzk_err("MZK DIRECTORY %s: NOT A DIRECTORY", mPath);
+        return 1;
+	}
+
+	// REMEMBER ITS DEVICE, SO WE KNOW IF A SUBDIR IS A MOUNTPOINT
+    const dev_t mDev = st.st_dev;
+
+	// SEE ALL PARTITIONS DIRECTORIES
+    DIR* const mdir = fdopendir(mfd);
+
+    if (mdir == NULL) {
+        mzk_err("MZK DIRECTORY %s: FAILED TO OPEN: %s", mPath, strerror(errno));
+        return 1;
+    }
+
+    struct dirent* mentry;
+
+    while ((mentry = readdir(mdir))) {
+
+        const char* const label = mentry->d_name;
+
+        // SKIP . AND ..
+        if (label[0] == '.')
+            continue;
+
+		char pPath[512]; snprintf(pPath, sizeof(pPath), "%s%s/", mPath, label);
+
+		mzk_log("PARTITION DIRECTORY %s", pPath);
 
         //
-        const int dfd = open(fdir, O_RDONLY);
+        const int dfd = openat(mfd, pPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
 
         if (dfd == -1) {
-            mzk_err("FAILED TO OPEN DIRECTORY %s: %s", fdir, strerror(errno));
+            mzk_err("PARTITION DIRECTORY %s: FAILED TO OPEN: %s", pPath, strerror(errno));
             continue;
         }
 
-        //
-        off_t partBlk = 0;
+        DIR* const dir = fdopendir(dfd);
 
-        if (ioctl(dfd, FIGETBSZ, &partBlk) == -1 || partBlk == 0)  {
-            mzk_err("FAILED TO FIGETBSZ DIRECTORY %s: %s", fdir, strerror(errno));
-            continue;
+        if (dir == NULL) {
+            mzk_err("PARTITION DIRECTORY %s: FAILED TO OPEN: %s", pPath, strerror(errno));
+            goto _next_dir;
         }
 
         //
         struct stat st;
 
         if (fstat(dfd, &st)) {
-            mzk_err("FAILED TO STAT DIRECTORY %s: %s", fdir, strerror(errno));
-            continue;
+            mzk_err("PARTITION DIRECTORY %s: FAILED TO STAT: %s", pPath, strerror(errno));
+            goto _next_dir;
+        }
+
+        //
+        off_t partBlk = 0;
+
+        if (ioctl(dfd, FIGETBSZ, &partBlk) == -1 || partBlk == 0)  {
+            mzk_err("PARTITION DIRECTORY %s: FAILED TO FIGETBSZ: %s", pPath, strerror(errno));
+            goto _next_dir;
         }
 
         //
         const dev_t partDev = st.st_dev;
+
+        if (partDev == mDev) {
+			mzk_log("PARTITION DIRECTORY %s: SKIPPING (NOT MOUNTED)", pPath);
+            goto _next_dir;
+		}
 
         ASSERT(sizeof(partDev) <= sizeof(part_hash_t));
 
@@ -111,14 +176,7 @@ int main (int argsN, char* args[]) {
 
         if (partID >= PARTS_N) {
             mzk_err("FAILED TO REGISTER PARTITION");
-            continue;
-        }
-
-        DIR* const dir = fdopendir(dfd);
-
-        if (dir == NULL) {
-            mzk_err("FAILED TO OPEN DIRECTORY %s: %s", fdir, strerror(errno));
-            continue;
+            goto _next_dir;
         }
 
         struct dirent* dentry;
@@ -132,9 +190,9 @@ int main (int argsN, char* args[]) {
                 continue;
 
             //
-            char fpath[512]; snprintf(fpath, sizeof(fpath), "%s/%s", fdir, fname);
+            char fpath[1024]; snprintf(fpath, sizeof(fpath), "%s%s", pPath, fname);
 
-            const int fd = openat(dfd, fname, O_RDONLY);
+            const int fd = openat(dfd, fname, O_RDONLY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
 
             if (fd == -1) {
                 mzk_err("FAILED TO OPEN FILE %s: %s", fpath, strerror(errno));
@@ -186,17 +244,17 @@ int main (int argsN, char* args[]) {
                 continue;
             }
 
-			const size_t typeNew = typesTree->count;
+            const size_t typeNew = typesTree->count;
             const size_t typeID = types_lookup_add(typesTree, type);
 
-			if (typeID >= typeNew) {
-				if (typeID == typeNew) {
-					*(u64*)(db->types[typeID]) = type;
-				} else {
-					mzk_err("FAILED TO REGISTER TYPE");
-					continue;
-				}
-			}
+            if (typeID >= typeNew) {
+                if (typeID == typeNew) {
+                    *(u64*)(db->types[typeID]) = type;
+                } else {
+                    mzk_err("FAILED TO REGISTER TYPE");
+                    continue;
+                }
+            }
 
             //
             const size_t songNew = db->songsTree->count;
@@ -220,8 +278,11 @@ int main (int argsN, char* args[]) {
             song->type  = typeID;
         }
 
+_next_dir:
         closedir(dir);
     }
+
+    closedir(mdir);
 
     // IDENTIFICA OS DISCOS
     disk_tree_s* const disksTree = disks_new(DISKS_N, NULL);
@@ -244,7 +305,7 @@ int main (int argsN, char* args[]) {
         snprintf(dpath, sizeof(dpath), "/sys/dev/block/%u:%u/../dev", partMajor, partMinor);
 
         if ((s = read((fd = open(dpath, O_RDONLY)), value, sizeof(value) - 1)) < 4 || value[s -= 1] != '\n')
-            goto _part;
+            goto _use_part;
 
         close(fd);
 
@@ -259,7 +320,7 @@ int main (int argsN, char* args[]) {
         snprintf(dpath, sizeof(dpath), "/sys/dev/block/%u:%u/start", partMajor, partMinor);
 
         if ((s = read((fd = open(dpath, O_RDONLY)), value, sizeof(value) - 1)) <= 1 || value[s -= 1] != '\n')
-            goto _part;
+            goto _use_part;
 
         close(fd);
 
@@ -267,14 +328,14 @@ int main (int argsN, char* args[]) {
 
         start = strtoull(value, NULL, 10) * 512;
 
-        goto _update;
+        goto _use_disk;
 
-_part: // PARTITION IS THE DISK ITSELF
+_use_part: // THE DISK IS THE PARTITION ITSELF
         close(fd);
 
         diskMajor = partMajor; start = 0;
         diskMinor = partMinor;
-_update:
+_use_disk: // THE DISK IS THE DISK
         // NOTE: NUNCA FALHA POIS TEM TANTOS DISCOS QUANTO PARTICOES NA ARRAY
         const size_t diskNew = disksTree->count;
         const size_t diskID = disks_lookup_add(disksTree, makedev(diskMajor, diskMinor));
