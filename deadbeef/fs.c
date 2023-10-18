@@ -190,7 +190,7 @@ static int do_read(const char *fpath, char *buffer, size_t size, off_t offset, f
 
 static struct fuse_operations operations = {
     .open       = do_open,
-    .getattr    = do_getattr,
+    .getattr    = (void*)do_getattr,
     .opendir    = do_opendir,
     .readdir    = do_readdir,
     .read       = do_read,
