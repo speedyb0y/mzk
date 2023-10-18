@@ -192,6 +192,7 @@ static int do_read(const char *fpath, char *buffer, size_t size, off_t offset, f
         return -1; // TODO:
 
     // TODO:
+    // Read should return exactly the number of bytes requested except on EOF or error, otherwise the rest of the data will be substituted with zeroes. An exception to this is when the 'direct_io' mount option is specified, in which case the return value of the read system call will reflect the return value of this operation. 
     return pread(fd, buffer, size, offset);
 }
 
@@ -204,6 +205,7 @@ static struct fuse_operations operations = {
     .mkdir      = do_mkdir,
     .mknod      = do_mknod,
     .write      = do_write,
+    .unlink     = do_unlink,
 };
 
 int main(int argc, char *argv[]) {
