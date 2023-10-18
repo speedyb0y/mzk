@@ -204,7 +204,7 @@ int main (int argsN, char* args[]) {
             const int fd = openat(pfd, fname, O_RDONLY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
 
             if (fd == -1) {
-                mzk_err("FAILED TO OPEN FILE %s: %s", fpath, strerror(errno));
+                mzk_err("FILE %s: FAILED TO OPEN: %s", fpath, strerror(errno));
                 continue;
             }
 
@@ -267,15 +267,15 @@ int main (int argsN, char* args[]) {
 
             //
             const size_t songNew = db->songsTree->count;
-            const size_t songID = songs_add_single(db->songsTree, code); // TODO: _multiple
+            const size_t songID = songs_add_single(db->songsTree, ((code << 5) | typeID));
 
             if (songID > songNew) {
-                mzk_err("FAILED TO REGISTER FILE %s", fpath);
+                mzk_err("FILE %s: FAILED TO REGISTER", fpath);
                 continue;
             }
 
-            if (songID != songNew) {
-                mzk_warn("REPEATED FILE %s", fpath);
+            if (songID != songNew) { // TODO: _multiple
+                mzk_warn("FILE %s: REPEATED", fpath);
                 continue;
             }
 
