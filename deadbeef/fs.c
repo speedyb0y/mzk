@@ -114,7 +114,7 @@ static int do_readdir (const char* fpath, void* buffer, fuse_fill_dir_t filler, 
             (char*)&db->types[db->songs[sid].type]
         );
         
-        filler(buffer, fnae, &stat, 0);
+        filler(buffer, fname, &stat, 0);
     }
 
     return 0;
