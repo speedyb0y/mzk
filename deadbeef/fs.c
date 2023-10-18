@@ -184,7 +184,8 @@ static int do_read(const char *fpath, char *buffer, size_t size, off_t offset, f
         // DISK NOT OPEN
         return -1; // TODO:
 
-    return -1;
+    // TODO:
+    return pread(fd, buffer, size, offset);
 }
 
 static struct fuse_operations operations = {
