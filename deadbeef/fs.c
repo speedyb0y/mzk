@@ -21,7 +21,7 @@ static int do_getattr (const char* fpath, struct stat *st) {
     printf("GETATTR |%s|\n", fpath);
 
     // ROOT
-    if (strcmp(path, "/") == 0) {
+    if (strcmp(fpath, "/") == 0) {
         st->st_ino = 0;
         st->st_uid = 0;
         st->st_gid = 0;
