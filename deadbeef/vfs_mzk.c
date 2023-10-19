@@ -20,7 +20,7 @@ typedef struct mzk_file_s {
 } mzk_file_s;
 
 //
-static const char* scheme_names[] = { "/mnt/MZK", NULL };
+static const char* scheme_names[] = { "/MZK", NULL };
 
 static const char** mzk_get_schemes (void) {
 
@@ -41,24 +41,23 @@ static DB_FILE* mzk_open (const char* fpath) {
 
     mzk_dbg("OPEN FILE: PATH %s", fpath);
 
-    // NOTE: IF THE PATH IS NOT VALID THAN ITS CODE WILL BE 0; NO 0 IS REGISTERED
-    const size_t sid = songs_lookup(db->songsTree, fpath_code(fpath));   // TODO: USAR O REAL PATH :S
+	// TODO: FIXME: VAI TERQUE AVANCAR TODOS OS /
+    if (strncmp(fpath, "/MZK/", 5))
+		return NULL;
 
-    if (sid >= SONGS_N) {
-        mzk_err("OPEN FILE: NOT FOUND");
-        errno = ENOENT;
+    // NOTE: IF THE PATH IS NOT VALID THAN ITS CODE WILL BE 0; NO 0 IS REGISTERED
+    const size_t sid = mzk_fname_sid(fpath + 5);   // TODO: USAR O REAL PATH :S
+
+    if (sid == SID_NOT_FOUND
+     || sid == SID_ROOT)
         return NULL;
-    }
 
     const song_s* const song = &db->songs[sid];
 
     const int fd = fds[song->disk];
 
-    if (fd == -1) {
-        mzk_err("OPEN FILE: DISK NOT OPEN");
-        errno = ENOENT;
+    if (fd == -1)
         return NULL;
-    }
 
     mzk_file_s* const file = malloc(sizeof(*file));
 
@@ -75,12 +74,12 @@ static DB_FILE* mzk_open (const char* fpath) {
     }
 
     mzk_dbg("OPEN FILE: ID %zu FD %d DISK #%llu /dev/block/%u:%u START %zu POS %zu END %zu", sid, file->fd,
-		(uintll)song->disk,
-		db->disks[song->disk][0],
-		db->disks[song->disk][1],
-		(size_t)file->start,
-		(size_t)file->pos,
-		(size_t)file->end);
+        (uintll)song->disk,
+        db->disks[song->disk][0],
+        db->disks[song->disk][1],
+        (size_t)file->start,
+        (size_t)file->pos,
+        (size_t)file->end);
     return (DB_FILE*)file;
 }
 
@@ -93,8 +92,11 @@ static size_t mzk_read (void* buff, size_t size, size_t qnt, DB_FILE* dfile) {
 
     mzk_file_s* const file = PTR(dfile);
 
+    //
+    off_t pos = file->pos;
+
     // QUANTOS OBJETOS TEM DISPONIVEIS
-    const size_t tem = (file->end - file->pos) / size;
+    const size_t tem = (file->end - pos) / size;
 
     // SE PEDIU MAIS DO QUE TEM, VAI DAR SÓ TUDO O QUE TEM
     if (qnt > tem)
@@ -102,8 +104,6 @@ static size_t mzk_read (void* buff, size_t size, size_t qnt, DB_FILE* dfile) {
 
     // MARCA ONDE VAI TER QUE PARAR ENTÃO
     size *= qnt;
-
-    off_t pos = file->pos;
 
     //
     while (size) {
@@ -184,25 +184,25 @@ static int mzk_scandir (const char *dir, struct dirent ***namelist, int (*select
     mzk_log("mzk_scandir(%s, %p, %p, %p)",
         dir, namelist, selector, cmp);
 
-    if (!memcmp(dir, "/mnt/MZK", strlen("/mnt/MZK"))) { // TODO: LISTAR SO OS ARQUIVOS DE TAL DIRETORIO
-        errno = ENOENT;
+    if (strncmp(dir, "/MZK", strlen("/MZK"))
+     && strncmp(dir, "/MZK/", strlen("/MZK/"))) // TODO: LISTAR SO OS ARQUIVOS DE TAL DIRETORIO
         return -1;
-    }
 
     struct dirent** const entries = malloc((db->songsTree->count +1)* sizeof(struct dirent*));
 
     size_t count = 0;
 
-    foreach (size_t, i, db->songsTree->count) {
+    foreach (size_t, sid, db->songsTree->count) {
 
         struct dirent entry = { // NOTE: NO "d_namlen"
-            .d_fileno = i,
+            .d_fileno = sid,
             .d_type = DT_REG,
         };
 
         // GERA O NOME E COLOCA A EXTENSÃO
-        strcpy(code_to_str(TREE_HASHES(db->songsTree, i)[0], entry.d_name),
-            (char*)&db->types[db->songs[i].type]
+        code_to_str(entry.d_name,
+            TREE_HASHES(db->songsTree, sid)[0],
+            TREE_HASHES(db->songsTree, sid)[1]
         );
 
         if (!selector || selector(&entry))
@@ -301,31 +301,31 @@ void mzk_thread (void *ctx) {
         sleep(1);
     }
 
-	//
+    //
     ddb_playlist_t* plt = deadbeef->plt_find_by_name("CONVERTED");
 
     // VE TODOS OS ARQUIVOS QUE ESTAO NA PLAYLIST ALL
     //   dai os que nao estao, adiciona
     //   reordena
 
-	if (plt){
-		// request lock for adding files to playlist
-		// returns 0 on success
-		// this function may return -1 if it is not possible to add files right now.
-		deadbeef->plt_add_files_begin (plt, 10);
+    if (plt){
+        // request lock for adding files to playlist
+        // returns 0 on success
+        // this function may return -1 if it is not possible to add files right now.
+        deadbeef->plt_add_files_begin (plt, 10);
 
-		foreach (size_t, i, db->songsTree->count) {
-			mzk_log("ADD FILE #%zu", i);
-			deadbeef->plt_add_file2 (10, plt, "/mnt/CONVERTED/U8PBvrJFKB.flac", callback, "oiii");
-			//deadbeef->plt_add_dir2 (10, plt, "/mnt/ewgewgew", callback, "huahauahua");
-			//ddb_playItem_t * (*plt_insert_file2) (int visibility, ddb_playlist_t *playlist, ddb_playItem_t *after, const char *fname, int *pabort, int (*callback)(DB_playItem_t *it, void *user_data), void *user_data);
-			//ddb_playItem_t *(*plt_insert_dir2) (int visibility, ddb_playlist_t *plt, ddb_playItem_t *after, const char *dirname, int *pabort, int (*callback)(DB_playItem_t *it, void *user_data), void *user_data);
-		}
+        foreach (size_t, i, db->songsTree->count) {
+            mzk_log("ADD FILE #%zu", i);
+            deadbeef->plt_add_file2 (10, plt, "/mnt/CONVERTED/U8PBvrJFKB.flac", callback, "oiii");
+            //deadbeef->plt_add_dir2 (10, plt, "/mnt/ewgewgew", callback, "huahauahua");
+            //ddb_playItem_t * (*plt_insert_file2) (int visibility, ddb_playlist_t *playlist, ddb_playItem_t *after, const char *fname, int *pabort, int (*callback)(DB_playItem_t *it, void *user_data), void *user_data);
+            //ddb_playItem_t *(*plt_insert_dir2) (int visibility, ddb_playlist_t *plt, ddb_playItem_t *after, const char *dirname, int *pabort, int (*callback)(DB_playItem_t *it, void *user_data), void *user_data);
+        }
 
-		deadbeef->plt_add_files_end (plt, 10);
-	} else {
-		printf("viiiiiiiiish\n");
-	}
+        deadbeef->plt_add_files_end (plt, 10);
+    } else {
+        printf("viiiiiiiiish\n");
+    }
 
     while (1) {
 

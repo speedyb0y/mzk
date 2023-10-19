@@ -6,18 +6,17 @@
 #define SONGS_N 500000
 #define DISKS_N 255
 #define PARTS_N DISKS_N
-#define TYPES_N 128
 
 #define SONG_SIZE_MAX (32ULL*1024*1024*1024)
 
 // SONGS
-typedef tree32x64_hash_t  song_hash_t;
-typedef tree32x64_s       song_tree_s;
-#define songs_new          tree32x64_new
-#define songs_add_multiple tree32x64_add_multiple // TODO: ACCEPT MULTIPLE!!!
-#define songs_add_single   tree32x64_add_single
-#define songs_lookup       tree32x64_lookup
-#define songs_lookup_add   tree32x64_lookup_add
+typedef tree32x128_hash_t  song_hash_t;
+typedef tree32x128_s       song_tree_s;
+#define songs_new          tree32x128_new
+#define songs_add_multiple tree32x128_add_multiple // TODO: ACCEPT MULTIPLE!!!
+#define songs_add_single   tree32x128_add_single
+#define songs_lookup       tree32x128_lookup
+#define songs_lookup_add   tree32x128_lookup_add
 
 // DISKS
 typedef tree8x64_hash_t  disk_hash_t;
@@ -46,8 +45,7 @@ typedef tree8x64_s       type_tree_s;
 typedef struct song_s {
     u64 start;
     u64 size:48,
-        disk:8,
-        type:8;
+        disk:16;
 } song_s;
 
 // DATABASE
@@ -55,15 +53,11 @@ typedef struct song_s {
 #define MZK_VERSION 1
 #define MZK_REVISION 0
 
-// DEIXA UM PARA O \0
-#define MZK_TYPE_LEN 7
-
 typedef struct db_verify_s {
     song_tree_s songTree;
     song_hash_t songHash;
     song_s      song;
     u8 disksN;
-    u8 typesN;
     u8 songsN;
 } db_verify_s;
 
@@ -74,10 +68,8 @@ typedef struct db_s {
     u64 checksum;
     size_t size; // OF THIS ENTIRE FILE
     time_t time;
-    u16 typesN;
-    u16 disksN;
+    size_t disksN;
     u32 disks[DISKS_N][2]; // MAJOR, MINOR
-    char types[TYPES_N][MZK_TYPE_LEN + 1];
     song_tree_s songsTree[SONGS_N + 1];
     song_s songs[SONGS_N];
     db_verify_s verify;
@@ -86,12 +78,11 @@ typedef struct db_s {
 static const db_verify_s verify = {
     .songTree = { .count = 0, .size = 1, .childs = { 0, 1 }, },
     .songHash = 6,
-    .song = {        
+    .song = {
         .start = 0x5464500465ULL,
         .size = 0x3423432ULL,
         .disk = 0x13,
-        .type = 0x45,
-    }   
+    }
 };
 
 #if !MZK_DEBUG
@@ -103,18 +94,17 @@ static const db_verify_s verify = {
 #define mzk_warn(fmt, ...) fprintf(stderr, "MZK: WARNING: " fmt "\n", ##__VA_ARGS__)
 #define mzk_err(fmt, ...)  fprintf(stderr, "MZK: ERROR: "   fmt "\n", ##__VA_ARGS__)
 
+#define SID_NOT_FOUND    SONGS_N
+#define SID_ROOT        (SONGS_N + 1)
+
 static int fds[DISKS_N];
 static db_s* db;
 
 // TODO: ON EXIT: unmap disks
-static inline char* code_to_str (u64 code, char* str) {
+static inline void code_to_str (char* str, u64 code, u64 ext) {
 
-    const size_t typeID = code / 0x0BA5CA5392CB0400ULL;
-
-    code %= 0x0BA5CA5392CB0400ULL;
-
-    // THE NAME
     // ASSERT: code != 0
+    // ASSERT; code <= 0xBA5CA5392CB03FFULL
     static char alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     while (code) {
@@ -122,41 +112,16 @@ static inline char* code_to_str (u64 code, char* str) {
         code /= 62;
     }
 
-    // APPEND THE EXTENSION (WITH THE \0)
-    const char* type = db->types[typeID];
+    *str++ = '.';
 
-    while ((*str = *type)) {}
-        type++;
-        str++;        
-    }
-
-    return str;
+#if 0
+    ext = __builtin_swap64(ext);
+#endif
+    while ((*str++ = ext & 0xFFU))
+        ext >>= 8;
 }
 
-static inline u64 fpath_type (const char* fpath) {
-
-    const char* start = fpath;
-
-    while (*fpath) {
-        if (*fpath == '.')
-            start = fpath;
-        fpath++;
-    }
-
-    const size_t len = fpath - start;
-
-    // JA POE O \0
-    u64 type = 0;
-
-    // PRECISARA DE UM \0
-    // NOTE: CONSIDERAMOS ARQUIVOS COM EXTENSAO NULA INVALIDOS COMO EXTENSAO GRANDE
-    if (len < sizeof(u64))
-        memcpy(&type, start, len);
-// TODO: FIXME: SE FOR BIG ENDIAN, PRECISA DAR UM SWAP64
-    return type;
-}
-
-static inline u64 fname_code (const char* fname) {
+static inline int fname_code (const char* fname, u64* const code_, u64* const ext_) {
 
     u64 mult = 1;
     u64 code = 0;
@@ -172,37 +137,46 @@ static inline u64 fname_code (const char* fname) {
         elif (c >= 'A' && c <= 'Z')
               c -= 'A' - (10 + 26);
         else // INVALID CHARACTER / MISSING EXTENSION
-            return 0;
+            return 1;
 
         // 62^10
         if (code >= 0x0BA5CA5392CB0400ULL)
-            return 0;
+            return 1;
 
         code += mult * c;
         mult *= 10 + 26 + 26;
     }
 
-    return code;
+    const char* ext = fname;
+
+    while (*fname)
+            fname++;
+
+    const size_t len = fname - ext;
+
+    // PRECISARA DE UM \0
+    if (len == 0 || len >= sizeof(u64))
+        // EXTENSAO NULA / EXTENSAO GRANDE
+        return 1;
+
+    // JA POE O \0
+    *code_ = code;
+    *ext_ = 0;
+
+    // TODO: FIXME: SE FOR BIG ENDIAN, PRECISA DAR UM SWAP64 AO USAR COMO HASH
+    memcpy(ext_, ext, len);
+
+    return 0;
 }
 
-static inline u64 fpath_code (const char* fpath) {
+static inline size_t mzk_fname_sid (const char* fpath) {
 
-    const char* fname = fpath;
+    u64 code, type;
 
-    while (*fpath)
-        if (*fpath++ == '/')
-            fname = fpath;
+    if (fname_code(fpath, &code, &type))
+        return SID_NOT_FOUND;
 
-    return fname_code(fname);
-}
-
-// OBS: SO SUPORTA mzk:// E NAO mzk:///////
-static inline u64 fschema_code (const char* fpath) {
-
-    if (strncasecmp("mzk://", fpath, 6))
-        return 0;
-
-    return fname_code(fpath + 6);
+    return songs_lookup(db->songsTree, code, type);
 }
 
 static int mzk_load (const char* const dbPath) {
@@ -230,7 +204,6 @@ static int mzk_load (const char* const dbPath) {
     }
 
     mzk_log("LOAD: DISKS: %zu", (size_t)db->disksN);
-    mzk_log("LOAD: TYPES: %zu", (size_t)db->typesN);
     mzk_log("LOAD: SONGS: %zu", (size_t)db->songsTree->count);
 
     if (db->magic != MZK_MAGIC) {
@@ -244,7 +217,7 @@ static int mzk_load (const char* const dbPath) {
     }
 
     if (db->revision != MZK_REVISION)
-        mzk_warn("LOAD: RELEASE MISMATCH: %u", db->revision);
+        mzk_warn("LOAD: REVISION MISMATCH: %u", db->revision);
 
     if (memcmp(&db->verify, &verify, sizeof(verify))) {
         mzk_err("LOAD: DATABASE VERIFICATION MISMATCH");
@@ -253,11 +226,6 @@ static int mzk_load (const char* const dbPath) {
 
     if (db->disksN >= DISKS_N) {
         mzk_err("LOAD: BAD DISKS COUNT");
-        goto _err_close;
-    }
-
-    if (db->typesN >= TYPES_N) {
-        mzk_err("LOAD: BAD TYPES COUNT");
         goto _err_close;
     }
 
@@ -271,21 +239,11 @@ static int mzk_load (const char* const dbPath) {
     foreach (size_t, songID, db->songsTree->count) {
 
         song_s* const song = &db->songs[songID];
-        
-		if (0)
-			mzk_dbg("SONG #%zu DISK %u START %zu SIZE %zu", songID,
-				  (uint)song->disk,
-				(size_t)song->start,
-				(size_t)song->size);
-					
-        if (song->disk >= db->disksN)
-            mzk_err("SONG HAS INVALID DISK");
-        if (song->start == 0)
-            mzk_err("SONG HAS INVALID START");
-        if (song->size >= SONG_SIZE_MAX)
-            mzk_err("SONG HAS INVALID SIZE");
-        if (song->type >= db->typesN)
-            mzk_err("SONG HAS INVALID TYPE");
+
+        if (song->disk >= db->disksN
+         || song->size >= SONG_SIZE_MAX
+         || song->start == 0)
+            mzk_err("INVALID SONG");
     }
 
     foreach (size_t, i, db->disksN) {

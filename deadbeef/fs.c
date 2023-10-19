@@ -16,26 +16,34 @@ typedef struct stat stat_s;
 
 typedef struct fuse_file_info fuse_file_info_s;
 
-static inline size_t get_sid (const char* fpath, fuse_file_info_s* finfo) {
+#define MZK_BLOCK_SIZE 65536
 
-    return finfo ? finfo->fh : strcmp(fpath, "/") ? songs_lookup(db->songsTree, fname_code(fpath + 1)) : SONGS_N;
+static inline size_t mzk_get_sid (const char* fpath, fuse_file_info_s* finfo) {
+
+    if (finfo)
+        return finfo->fh;
+
+    if (*++fpath == '\0')
+        return SID_ROOT;
+
+    return mzk_fname_sid(fpath);
 }
 
 static int do_getattr (const char* fpath, stat_s* st, fuse_file_info_s* finfo) {
 
     //
-    const size_t sid = get_sid(fpath, finfo);
+    const size_t sid = mzk_get_sid(fpath, finfo);
 
-    if (sid > SONGS_N)
+    if (sid == SID_NOT_FOUND)
         //
         return -ENOENT;
-    
-    if (sid == SONGS_N) {
+
+    if (sid == SID_ROOT) {
         // ROOT
-        st->st_mode  = S_IFDIR | 0555;
-        st->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
+        st->st_mode   = S_IFDIR | 0555;
+        st->st_nlink  = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
         st->st_blocks = 1;
-    
+
     } else {
         //
         const song_s* const song = &db->songs[sid];
@@ -43,7 +51,7 @@ static int do_getattr (const char* fpath, stat_s* st, fuse_file_info_s* finfo) {
         st->st_mode    = S_IFREG | 0444;
         st->st_nlink   = 1;
         st->st_size    =  song->size;
-        st->st_blocks  = (song->size + 65536 - 1)/65536; // TODO:
+        st->st_blocks  = (song->size + MZK_BLOCK_SIZE - 1)/MZK_BLOCK_SIZE; // TODO:
     }
 
     st->st_ino    = sid;
@@ -54,34 +62,44 @@ static int do_getattr (const char* fpath, stat_s* st, fuse_file_info_s* finfo) {
     st->st_atime  = 0; // TODO: FIXME: CREATION TIME?
     st->st_mtime  = 0;
     st->st_ctime  = 0;
-    st->st_blksize = 65536;    
+    st->st_blksize = MZK_BLOCK_SIZE;
 
     return 0;
 }
 
 static int do_opendir (const char* fpath, fuse_file_info_s* finfo) {
 
-    if (fpath == NULL)
-        return -1;
+    // DON'T ALLOW TO OPEN FOR WRITING
+    if ((finfo->flags & O_WRONLY) == O_WRONLY
+     || (finfo->flags & O_RDWR) == O_RDWR)
+        return -EROFS;
 
-    while (*fpath == '/')
-            fpath++;
+    const size_t sid = mzk_get_sid(fpath, NULL);
 
-    if (*fpath == '\0') {
-        finfo->fh = SONGS_N;
+    if (sid == SID_ROOT) {
+        // IT IS THE ROOT DIRECTORY
+        finfo->fh = SID_ROOT;
         return 0;
     }
 
-    return songs_lookup(db->songsTree, fname_code(fpath)) < SONGS_N ? -ENOTDIR : -ENOENT;
+    if (sid == SID_NOT_FOUND)
+        // IT DOESN'T EXIST
+        return -ENOENT;
+
+    // IT EXISTS BUT IS NOT A DIRECTORY
+    return -ENOTDIR;
 }
 
 static int do_readdir (const char* fpath, void* buffer, fuse_fill_dir_t filler, off_t offset, fuse_file_info_s* finfo) {
 
     (void)offset;
 
-    const size_t sid = get_sid(fpath, finfo);
+    const size_t sid = mzk_get_sid(fpath, finfo);
 
-    if (sid != SONGS_N)
+    if (sid == SID_NOT_FOUND)
+        return -ENOENT;
+
+    if (sid != SID_ROOT)
         return -ENOTDIR;
 
     filler(buffer, ".",  NULL, 0);
@@ -103,109 +121,150 @@ static int do_readdir (const char* fpath, void* buffer, fuse_fill_dir_t filler, 
             .st_mode    = S_IFREG | 0444,
             .st_size    = song->size,
             .st_nlink   = 1,
-            .st_blksize = 65536,
-            .st_blocks  = (song->size + 65536 - 1)/65536, // TODO:
+            .st_blksize = MZK_BLOCK_SIZE,
+            .st_blocks  = (song->size + MZK_BLOCK_SIZE - 1)/MZK_BLOCK_SIZE, // TODO:
         };
 
         char fname[32];
 
         // GERA O NOME E COLOCA A EXTENSÃO
-        strcpy(code_to_str(TREE_HASHES(db->songsTree, sid)[0], fname),
-            (char*)&db->types[db->songs[sid].type]
+        code_to_str(fname,
+            TREE_HASHES(db->songsTree, sid)[0],
+            TREE_HASHES(db->songsTree, sid)[1]
         );
-        
+
         filler(buffer, fname, &stat, 0);
     }
 
     return 0;
 }
 
-static int do_mkdir (const char *path, mode_t mode) {
-
-    (void)path;
-    (void)mode;
+static int do_mkdir (const char *fpath __unused, mode_t mode __unused) {
 
     return -EROFS;
 }
 
-static int do_mknod (const char *path, mode_t mode, dev_t rdev) {
-
-    (void)path;
-    (void)mode;
-    (void)rdev;
+static int do_mknod (const char *fpath __unused, mode_t mode __unused, dev_t rdev __unused) {
 
     return -EROFS;
 }
 
-static int do_write (const char *path, const char *buffer, size_t size, off_t offset, fuse_file_info_s *info) {
-
-    (void)path;
-    (void)buffer;
-    (void)size;
-    (void)offset;
-    (void)info;
+static int do_unlink (const char *fpath __unused) {
 
     return -EROFS;
 }
 
-static int do_open (const char* const fpath, fuse_file_info_s* const finfo) {
-    
-    mzk_dbg("OPEN FILE: PATH %s", fpath);
+static int do_rmdir (const char *fpath __unused) {
+
+    return -EROFS;
+}
+
+static int do_rename (const char* fpath __unused, const char* fpath2 __unused) {
+
+    return -EROFS;
+}
+
+static int do_link (const char* fpath __unused, const char* fpath2 __unused) {
+
+    return -EROFS;
+}
+
+static int do_write (const char* fpath __unused, const char *buffer __unused, size_t size __unused, off_t offset __unused, fuse_file_info_s *info __unused) {
+
+    return -EBADF;
+}
+
+static int do_create (const char* fpath __unused, mode_t mode __unused, fuse_file_info_s* const finfo __unused) {
+
+    return -EROFS;
+}
+
+static int do_open (const char* fpath, fuse_file_info_s* const finfo) {
+
+    // DON'T ALLOW TO OPEN FOR WRITING
+    if ((finfo->flags & O_WRONLY) == O_WRONLY
+     || (finfo->flags & O_RDWR) == O_RDWR)
+        return -EROFS;
 
     // NOTE: IF THE PATH IS NOT VALID THAN ITS CODE WILL BE 0; NO 0 IS REGISTERED
-    const size_t sid = songs_lookup(db->songsTree, fpath_code(fpath));   // TODO: USAR O REAL PATH :S
+    const size_t sid = mzk_get_sid(fpath, NULL);
 
-    if (sid >= SONGS_N) {
-        mzk_err("OPEN FILE: NOT FOUND");
+    if (sid == SID_NOT_FOUND)
         return -ENOENT;
-    }
 
-    const song_s* const song = &db->songs[sid];
-
-    if (fds[song->disk] == -1) {
-        mzk_err("OPEN FILE: DISK NOT OPEN");
-        return -ENOENT;
-    }
+    if (sid != SID_ROOT)
+        if (fds[db->songs[sid].disk] == -1)
+            return -ENOENT;
 
     finfo->fh = sid;
 
     return 0;
 }
 
-static int do_read(const char *fpath, char *buffer, size_t size, off_t offset, fuse_file_info_s *finfo) {
+static int do_read(const char *fpath, char* buff, size_t size, off_t offset, fuse_file_info_s* finfo) {
 
-    const size_t sid = get_sid(fpath, finfo);
+    const size_t sid = mzk_get_sid(fpath, finfo);
 
-    if (sid > SONGS_N)
+    if (sid == SID_NOT_FOUND)
         return -ENOENT;
 
-    // TODO: fh SONGS_N É O ROOT DIR
-    if (sid == SONGS_N)
-        return -1;
-    
+    if (sid == SID_ROOT)
+        return -EISDIR;
+
     const song_s* const song = &db->songs[sid];
 
     const int fd = fds[song->disk];
-    
+
     if (fd == -1)
         // DISK NOT OPEN
         return -1; // TODO:
 
-    // TODO:
-    // Read should return exactly the number of bytes requested except on EOF or error, otherwise the rest of the data will be substituted with zeroes. An exception to this is when the 'direct_io' mount option is specified, in which case the return value of the read system call will reflect the return value of this operation. 
-    return pread(fd, buffer, size, offset);
+    // QUANTOS TEM DISPONIVEIS
+    const size_t tem = song->size - offset;
+
+    // SE PEDIU MAIS DO QUE TEM, VAI DAR SÓ TUDO O QUE TEM
+    if (size > tem)
+        size = tem;
+
+    // ONDE ESTA
+    offset += song->start;
+
+    char* const was = buff;
+
+    //
+    while (size) {
+        const ssize_t c = pread(fd, buff, size, offset);
+        if (c == 0)
+            break;
+        if (c == -1)
+            // NOTE: AQUI ESTAMOS PERDENDO QUALQUER COISA QUE TENHA SIDO LIDA, MAS NÃO ME IMPORTO
+            return -errno;
+        buff   += c;
+        offset += c;
+        size   -= c;
+    }
+
+    //
+    return buff - was;
 }
 
 static struct fuse_operations operations = {
-    .open       = do_open,
-    .getattr    = (void*)do_getattr,
-    .opendir    = do_opendir,
-    .readdir    = do_readdir,
-    .read       = do_read,
-    .mkdir      = do_mkdir,
-    .mknod      = do_mknod,
-    .write      = do_write,
-    .unlink     = do_unlink,
+    .open    = do_open,
+    .getattr = (void*)do_getattr,
+    .opendir = do_opendir,
+    .readdir = do_readdir,
+    .read    = do_read,
+    .mkdir   = do_mkdir,
+    .mknod   = do_mknod,
+    .write   = do_write,
+    .unlink  = do_unlink,
+    .rmdir   = do_rmdir,
+    .link    = do_link,
+    .rename  = do_rename,
+    .create  = do_create,
+    //int(*     truncate )(const char *, off_t, struct fuse_file_info *fi)
+    //int(*     fallocate )(const char *, int, off_t, off_t, struct fuse_file_info *)
+    //int(* symlink) (const char *, const char *)
 };
 
 int main(int argc, char *argv[]) {

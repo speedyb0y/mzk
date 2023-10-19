@@ -21,6 +21,10 @@
 #include <linux/fs.h>
 #include <dirent.h>
 
+#ifndef __unused
+#define __unused __attribute__((unused))
+#endif
+
 #define PTR(p) ((void*)(p))
 
 #define elif else if

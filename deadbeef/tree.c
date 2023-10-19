@@ -37,8 +37,6 @@ typedef u64 tree64x128_hash_t;
 
 #define TREE_CHILDS_N(T) ((TREE##T##_SIZE - TREE##T##_HASH_N * sizeof(tree_hash_t(T)))/sizeof(tree_len_t(T)))
 
-#define TREE_LEN_MAX SIZE_MAX
-
 #define tree_s(T)      tree##T##_s
 #define tree_len_t(T)  tree##T##_len_t
 #define tree_hash_t(T) tree##T##_hash_t
@@ -110,7 +108,7 @@ static inline size_t tree##T##_insert (tree_s(T)* const tree, tree_len_t(T)* con
                                                                                                                            \
     /* LIMITA AO MAXIMO */                                                                                                 \
     if (tree->count == tree->size)                                                                                         \
-        return TREE_LEN_MAX;                                                                                               \
+        return tree->size;                                                                                               \
                                                                                                                            \
     /* PEGA O PROXIMO SLOT LIVRE */                                                                                        \
     tree_s(T)* const node = &tree[*ptr = ++(tree->count)];                                                                 \
@@ -126,7 +124,7 @@ static inline size_t tree##T##_lookup (const tree_s(T)* const tree, TREE_ARGS_DE
     loop { const TREELOOKUP_PTR(T);                                                                                        \
         TREELOOKUP_ID_FROM_PTR(T);                                                                                         \
         if (TREELOOKUP_ID_IS_END)                                                                                          \
-            return TREE_LEN_MAX;                                                                                           \
+            return tree->size;                                                                                           \
         TREELOOKUP_NODE_FROM_ID(T);                                                                                        \
         if (TREELOOKUP_NODE_IS_##T)                                                                                        \
             return TREELOOKUP_NODE_ID;                                                                                     \
@@ -168,7 +166,7 @@ static inline size_t tree##T##_add_single (tree_s(T)* const tree, TREE_ARGS_DECL
             return TREELOOKUP_INSERT(T);                                                                                   \
         TREELOOKUP_NODE_FROM_ID(T);                                                                                        \
         if (TREELOOKUP_NODE_IS_##T)                                                                                        \
-            return TREE_LEN_MAX;                                                                                           \
+            return tree->size;                                                                                           \
         TREELOOKUP_HASH_NEXT(T);                                                                                           \
     }                                                                                                                      \
 }                                                                                                                          \

@@ -80,9 +80,8 @@ int main (int argsN, char* args[]) {
 
     //
     part_tree_s* const partsTree = parts_new(PARTS_N, NULL);
-    type_tree_s* const typesTree = types_new(TYPES_N, NULL);
 
-	mzk_log("MZK DIRECTORY %s", mPath);
+    mzk_log("MZK DIRECTORY %s", mPath);
 
     // OPEN THE MZK DIR
     const int mfd = open(mPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
@@ -92,24 +91,24 @@ int main (int argsN, char* args[]) {
         return 1;
     }
 
-	//
+    //
     struct stat st;
 
     if (fstat(mfd, &st)) {
-		mzk_err("MZK DIRECTORY %s: FAILED TO STAT: %s", mPath, strerror(errno));
+        mzk_err("MZK DIRECTORY %s: FAILED TO STAT: %s", mPath, strerror(errno));
         return 1;
-	}
+    }
 
-	// CONFIRM IT IS A DIRECTORY
-	if (!S_ISDIR(st.st_mode)) {
-		mzk_err("MZK DIRECTORY %s: NOT A DIRECTORY", mPath);
+    // CONFIRM IT IS A DIRECTORY
+    if (!S_ISDIR(st.st_mode)) {
+        mzk_err("MZK DIRECTORY %s: NOT A DIRECTORY", mPath);
         return 1;
-	}
+    }
 
-	// REMEMBER ITS DEVICE, SO WE KNOW IF A SUBDIR IS A MOUNTPOINT
+    // REMEMBER ITS DEVICE, SO WE KNOW IF A SUBDIR IS A MOUNTPOINT
     const dev_t mDev = st.st_dev;
 
-	// SEE ALL PARTITIONS DIRECTORIES
+    // SEE ALL PARTITIONS DIRECTORIES
     DIR* const mdir = fdopendir(mfd);
 
     if (mdir == NULL) {
@@ -127,9 +126,9 @@ int main (int argsN, char* args[]) {
         if (pName[0] == '.')
             continue;
 
-		char pPath[512]; snprintf(pPath, sizeof(pPath), "%s%s/", mPath, pName);
+        char pPath[512]; snprintf(pPath, sizeof(pPath), "%s%s/", mPath, pName);
 
-		mzk_log("PARTITION DIRECTORY %s", pPath);
+        mzk_log("PARTITION DIRECTORY %s", pPath);
 
         //
         const int pfd = openat(mfd, pPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NOCTTY | O_NOATIME);
@@ -155,30 +154,30 @@ int main (int argsN, char* args[]) {
             goto _next_partition;
         }
 
-		// CONFIRM IT IS A DIRECTORY
-		if (!S_ISDIR(st.st_mode)) {
-			mzk_err("PARTITION DIRECTORY %s: NOT A DIRECTORY", mPath);
-			goto _next_partition;
-		}
+        // CONFIRM IT IS A DIRECTORY
+        if (!S_ISDIR(st.st_mode)) {
+            mzk_err("PARTITION DIRECTORY %s: NOT A DIRECTORY", mPath);
+            goto _next_partition;
+        }
 
         //
         const dev_t partDev = st.st_dev;
 
         if (partDev == mDev) {
-			mzk_log("PARTITION DIRECTORY %s: SKIPPING (NOT MOUNTED)", pPath);
+            mzk_log("PARTITION DIRECTORY %s: SKIPPING (NOT MOUNTED)", pPath);
             goto _next_partition;
-		}
+        }
 
-		//
+        //
         ASSERT(sizeof(partDev) <= sizeof(part_hash_t));
 
         const size_t partID = parts_add_single(partsTree, partDev);
 
         if (partID >= PARTS_N) {
-			mzk_log("PARTITION DIRECTORY %s: FAILED TO REGISTER (DUPLICATED?)", pPath);
+            mzk_log("PARTITION DIRECTORY %s: FAILED TO REGISTER (DUPLICATED?)", pPath);
             goto _next_partition;
         }
-        
+
         //
         off_t partBlk = 0;
 
@@ -187,7 +186,7 @@ int main (int argsN, char* args[]) {
             goto _next_partition;
         }
 
-		// SEE ALL FILES IN THE PARTITION
+        // SEE ALL FILES IN THE PARTITION
         struct dirent* dentry;
 
         while ((dentry = readdir(pdir))) {
@@ -208,26 +207,11 @@ int main (int argsN, char* args[]) {
                 continue;
             }
 
-            const u64 code = fname_code(fname);
-            const u64 type = fpath_type(fname);
+            u64 code, type;
 
-            if (!code) {
-                mzk_err("FILE %s: BAD NAME", fpath);
-                continue;
-            }
-
-            if (!type) {
-                mzk_err("FILE %s: BAD TYPE", fpath);
-                continue;
-            }
-
-            //
-            struct stat st;
-
-            if (fstat(fd, &st)) {
-                mzk_err("FILE %s: FAILED TO STAT: %s", fpath, strerror(errno));
-                close(fd);
-                continue;
+            if (fname_code(fname, &code, &type)) {
+                mzk_err("FILE %s: BAD NAME/EXTENSION", fpath);
+                goto _next_file;
             }
 
             //
@@ -235,62 +219,50 @@ int main (int argsN, char* args[]) {
 
             if (ioctl(fd, FIBMAP, &songBlks) == -1 || songBlks == 0) {
                 mzk_err("FILE %s: FAILED TO FIBMAP: %s", fpath, strerror(errno));
-                close(fd);
-                continue;
+                goto _next_file;
             }
 
-            close(fd);
+            //
+            struct stat st;
+
+            if (fstat(fd, &st)) {
+                mzk_err("FILE %s: FAILED TO STAT: %s", fpath, strerror(errno));
+                goto _next_file;
+            }
 
             // IGNORE EMPTY FILES
             if (st.st_size == 0) {
                 mzk_warn("FILE %s: IGNORING (EMPTY)", fpath);
-                continue;
+                goto _next_file;
             }
 
             //
             if (st.st_dev != partDev) {
                 mzk_err("FILE %s: DEV IS NOT DIR DEV", fpath);
-                continue;
-            }
-
-            const size_t typeNew = typesTree->count;
-            const size_t typeID = types_lookup_add(typesTree, type);
-
-            if (typeID >= typeNew) {
-                if (typeID == typeNew) {
-                    *(u64*)(db->types[typeID]) = type;
-                } else {
-                    mzk_err("FAILED TO REGISTER TYPE");
-                    continue;
-                }
+                goto _next_file;
             }
 
             //
             const size_t songNew = db->songsTree->count;
-            const size_t songID = songs_add_single(db->songsTree, ((code << 5) | typeID));
+            const size_t sid = songs_add_single(db->songsTree, code, type); // TODO: _multiple
 
-            if (songID > songNew) {
+            if (sid > songNew) {
                 mzk_err("FILE %s: FAILED TO REGISTER", fpath);
-                continue;
+                goto _next_file;
             }
 
-            if (songID != songNew) { // TODO: _multiple
+            if (sid != songNew) {
                 mzk_warn("FILE %s: REPEATED", fpath);
-                continue;
+                goto _next_file;
             }
 
-            song_s* const song = &db->songs[songID];
+            song_s* const song = &db->songs[sid];
 
             song->disk  = partID;
             song->start = partBlk * songBlks;
             song->size  = st.st_size;
-            song->type  = typeID;
-
-			if (0)
-				mzk_dbg("SONG #%zu PART %u START %zu SIZE %zu", songID,
- 					  (uint)song->disk,
-					(size_t)song->start,
-					(size_t)song->size);
+_next_file:
+            close(fd);
         }
 
 _next_partition:
@@ -382,10 +354,8 @@ _use_disk: // THE DISK IS THE DISK
 
     //
     db->disksN = disksTree->count;
-    db->typesN = typesTree->count;
 
     mzk_log("DISKS: %zu", (size_t)db->disksN);
-    mzk_log("TYPES: %zu", (size_t)db->typesN);
     mzk_log("SONGS: %zu", (size_t)db->songsTree->count);
 
     //
