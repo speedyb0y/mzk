@@ -35,6 +35,14 @@ int main (int argsN, char* args[]) {
         return 1;
     }
 
+    //
+    const int fdXXX = open("/MZK", O_RDONLY | O_DIRECTORY | O_NOCTTY | O_NOATIME);
+
+    if (fdXXX == -1) {
+        mzk_err("COULD NOT OPEN /MZK: %s", strerror(errno));
+        return 1;
+    }
+
     const char* const dbPath = args[1];
     const char* const  mPath = args[2];
 
@@ -261,6 +269,11 @@ int main (int argsN, char* args[]) {
             song->disk  = partID;
             song->start = partBlk * songBlks;
             song->size  = st.st_size;
+
+            // 
+           if (symlinkat(fpath, fdXXX, fname)) {
+                mzk_err("FILE %s: FAILED TO LINK TO %s: %s", fname, fpath, strerror(errno));
+           }
 _next_file:
             close(fd);
         }

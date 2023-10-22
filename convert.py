@@ -127,7 +127,8 @@ if tid == CPUS:
     try:
         for f in sys.argv[1:]:
             for f in os.popen(f"find '{f}' -type f -print0").read(8*1024*1024).encode().split(b'\x00'):
-                os.write(pipeOut, f)
+                if re.match(b'^.*[.](mp3|aac|flac|wav|mp4|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
+                    os.write(pipeOut, f)
     except KeyboardInterrupt:
         pass
 
@@ -177,10 +178,6 @@ try: # THREAD
 
     while original := os.read(pipeIn, 2048):
         original = original.decode()
-
-        if not original.lower().endswith(('.mp3', '.aac', '.flac', '.wav', '.mp4', '.m4a', '.ogg', '.opus', '.ape', '.wma', '.wv', '.alac', '.aif', '.aiff')):
-            print(f'[{tid}] {original}: SKIPPED UNKNOWN EXTENSION')
-            continue
 
         i = o = imap = ibuff = fp = fpFormat = fpStream = tags = args = None
 
@@ -349,13 +346,15 @@ try: # THREAD
                 ('PCM_S24LE', 's32',  24, 24)   : ('flac', 24),
                 ('PCM_S32LE', 's32',  32, 32)   : ('flac', 32),
                 ('PCM_F32LE', 'flt',  32, None) : ('flac', 32),
+                ('DTS',       'fltp', 0,  None) : ('opus', 24),
+                ('WAVPACK',   'fltp', 0,  32)   : ('opus', 24),
                 ('MP3',       'fltp', 0,  None) : ('opus', 24),
                 ('AAC',       'fltp', 0,  None) : ('opus', 24),
                 ('VORBIS',    'fltp', 0,  None) : ('opus', 24),
                 ('WMAPRO',    'fltp', 0,  None) : ('opus', 24),
                 ('OPUS',      'fltp', 0,  None) : ('opus', 24), # CAUTION
+                ('WMAV2',     'fltp', 0,  None) : ('opus', 24),
                 ('WMALOSSLESS', 's16p', 0, None) : ('opus', 24),
-                ('WMAV2', 'fltp', 0, None) : ('opus', 24),
             } [(ORIGINAL_CODEC_NAME,
                 ORIGINAL_SAMPLE_FMT,
                 ORIGINAL_BITS,
