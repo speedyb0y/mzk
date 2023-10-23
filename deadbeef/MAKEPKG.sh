@@ -175,3 +175,39 @@ package() {
 
   install -D COPYING -t "${pkgdir}/usr/share/licenses/${pkgname}"
 }
+
+
+  --disable-option-checking  ignore unrecognized --enable/--with options
+  --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
+  --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
+  --disable-largefile     omit support for large files
+  --enable-gtk3           Use GTK3 instead of GTK2 (default=disabled)
+  --disable-gtk           Disable GTK+ support (default=enabled)
+  --disable-qt            Disable Qt support (default=enabled)
+  --disable-rpath         do not use rpath
+  --disable-nls           do not use Native Language Support
+  --disable-rpath         do not hardcode runtime library paths
+  --enable-adplug         enable AdLib support (default=auto)
+  ./configure --prefix=/usr --disable-{bs2b,cdaudio,amidiplug,mpg123,aac,wavpack,ffaudio,sndfile,modplug,openmpt,sid,console,speedpitch,sndio,jack,oss4,mms,neon,notify,lirc,coreaudio,sdlout,ampache,streamtuner,aosd,qthotkey,hotkey,qtglspectrum,glspectrum,scrobbler2,songchange,cue,mpris2} --enable-{resample,soxr,alsa,pipewire,flac,vorbis,opus}           
+
+  --enable-pipewire       enable PipeWire output (default=auto)
+  --enable-pulse          enable PulseAudio output (default=auto)
+  --enable-          enable Sndio output (default=auto)
+  --enable-cue            enable cue sheet support (default=auto)
+  --enable-         enable MPRIS 2 server (default=auto)
+  --enable-     enable song change plugin (default=auto)
+  --enable-     enable Scrobbler 2 (default=auto)
+  --enable-     enable OpenGL spectrum analyzer (default=auto)
+  --enable-         enable global hotkeys (X11) (default=auto)
+  --enable-           enable X11 OSD (default=auto)
+  --enable-        enable Ampache browser (default=auto)
+  --enable-qtaudio        enable QtMultimedia output (default=auto)
+  --enable-    enable Stream tuner (experimental) (default=no)
+  --enable-   enable Qt OpenGL spectrum analyzer (default=auto)
+  --enable-       enable global hotkeys (X11) (default=auto)
+  --disable-     disable CoreAudio output plugin (default=enabled)
+  --enable-         enable SDL Output (default=auto)
+  --disable-filewriter    disable FileWriter output plugin (default=enabled)
+  --disable-filewriter_mp3
+                          disable FileWriter MP3 output part (default=enabled)
+  --enable-mac-media-keys enable Mac Media Keys

@@ -76,7 +76,7 @@ def add_result_list(self, results, user, country, inqueue, ulspeed, h_speed, h_q
     ], user, country, inqueue, ulspeed, h_speed, h_queue, color, private)
 
 HASHER = xxhash.xxh128_intdigest
-HASHER = bytes.__hash__
+#HASHER = bytes.__hash__
 
 try:
     KNOWNS = set(map(HASHER, open(f'/home/speedyb0y/NICOTINE-DOWNLOADED', 'rb').read().split(b'\x01')))
