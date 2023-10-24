@@ -9,8 +9,8 @@ import os
 # BY DEFAULT, CHECK THE MOUNTED ONES
 if len(sys.argv) == 1:
     files = [ f
-        for part in os.listdir(f'/mnt/MZK')
-        for f    in os.listdir(f'/mnt/MZK/{part}')
+        for p in os.listdir(f'/mnt/music')
+        for f in os.listdir(f'/mnt/music/{p}')
     ]
 else:
     files = [ f.rsplit('/', 1)[-1]
