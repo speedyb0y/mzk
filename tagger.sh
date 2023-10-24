@@ -8,7 +8,7 @@ if [ ! -e /proc/$$/fd/200 ] ; then
         wl-paste --no-newline --watch ${0}
     fi
 
-elif FS=$(tr '\r' '\n' | grep -E '^(file:|)/{1,}(MZK|mnt/music)/' | awk -F / '{print $NF}' | awk -F . '{print $1}' | tr '\n' ' ') ; then
+elif FS=$(tr '\r' '\n' | grep --text -E '^(file:|)/{1,}(MZK|mnt/music)/' | awk -F / '{print $NF}' | awk -F . '{print $1}' | tr '\n' ' ') ; then
 
     if [ ${#FS} -gt 1 ] ; then
 

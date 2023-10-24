@@ -11,35 +11,38 @@ L = int(L)
 N = int(N)
 
 assert 1 <= L <= 4096
-assert 1 <= N <= 4096
+assert 1 <= N <= 1000*1000
 
-checksum  = int(time.time()      * 10000000)
-checksum += int(time.monotonic() * 10000000)
-checksum += os.getpid()
-checksum &= 0xFFFFFFFFFFFFFFFF
+RANDOMFD = os.open('/dev/urandom', os.O_RDONLY)
+assert 0 <= RANDOMFD <= 10
 
-ALPHABET = [
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
-    'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-    'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
-    'U', 'V', 'W', 'X', 'Y', 'Z',
-    'u', 'v', 'w', 'x', 'y', 'z',
-] * 8
+ALPHABET = []
+# NORMAL
+ALPHABET += '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+# OK
+#ALPHABET += '@'
+# SHELL INSECURE
+#ALPHABET += '#$&!?=+,'
+# SHELL INSECURE - COMMAND OPTIONS
+#ALPHABET += '-'
+# UGLY
+#ALPHABET += '_'
+# HTTP INSECURE
+#ALPHABET += '%:'
 
-name = []
+random.shuffle(ALPHABET)
+
+ALPHABET = ''.join(ALPHABET)
+
+def mhash (length, alphabet=ALPHABET):
+    assert isinstance(length, int) and 1 <= length <= 512
+    f = sum(int(x()*10000000) for x in (os.getpid, time.time, time.time_ns, time.monotonic, time.monotonic_ns, random.random))
+    f += f >> 32
+    f %= len(alphabet)**length
+    code  = ''.join(alphabet[(f := (f + x)) % len(alphabet)] for x in os.read(RANDOMFD, length))
+    assert len(code) == length
+    #return ''.join(('%16s %16d %16x' % (code, f, f)))
+    return code
 
 for _ in range(N):
-
-    random.shuffle(ALPHABET)
-
-    for _ in range(L):
-        checksum += checksum >> 32
-        checksum += random.randint(0, 0xFFFFFFFFFFFFFFFF)
-        checksum &= 0xFFFFFFFFFFFFFFFF
-        name.append(ALPHABET[checksum % len(ALPHABET)])
-
-    print(''.join(name))
-
-    name.clear()
+    print(mhash(L))

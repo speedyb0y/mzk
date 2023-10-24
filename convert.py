@@ -125,10 +125,11 @@ if tid == CPUS:
     os.close(pipeIn)
 
     try:
-        for f in sys.argv[1:]:
-            for f in os.popen(f"find '{f}' -type f -print0").read(8*1024*1024).encode().split(b'\x00'):
-                if re.match(b'^.*[.](mp3|aac|flac|wav|mp4|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
-                    os.write(pipeOut, f)
+        for _ in range(3): # REPETE
+            for f in sys.argv[1:]:
+                for f in os.popen(f"find '{f}' -type f -print0").read(8*1024*1024).encode().split(b'\x00'):
+                    if re.match(b'^.*[.](mp3|aac|flac|wav|mp4|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
+                        os.write(pipeOut, f)
     except KeyboardInterrupt:
         pass
 
