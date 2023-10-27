@@ -159,7 +159,8 @@ while (h := omap.find(b'ISOFS64\x00', 0, end)) == -1:
         break
     end += c
 
-print('HEADER AT:', h)
+print('HEADER AT:', h, repr(oview[:65536]))
+assert 8192 <= h
 
 # TERMINA DE LER ELE
 end_ = h + len(m)
