@@ -128,7 +128,7 @@ osize = ((osize + 65536 - 1) // 65536) * 65536
 try:
     os.fallocate(ofd, osize)
 except AttributeError:
-    assert os.system(f'fallocate -l {osize} /proc/{os.getpid()}/fd/ofd') == 0
+    assert os.system(f'fallocate -l {osize} /proc/{os.getpid()}/fd/{ofd}') == 0
 
 ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
