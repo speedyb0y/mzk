@@ -154,7 +154,7 @@ end = 0
 # ACHA O NOSSO READER
 while (h := omap.find(b'ISOFS64\x00', 0, end)) == -1:
     c = pipeIO.readinto(oview[end:end+4*1024*1024])
-    print('leu:', c)
+    print(f'@ {end} leu {c}')
     if c == 0:
         break
     end += c
