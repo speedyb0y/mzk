@@ -192,20 +192,16 @@ for i, (real, st, new) in enumerate(reais):
         oview[end:end+1] = b'\x00'
         end += 1
 
-    # TODO: IXME: E SE O ARQUIVO UDAR DE TAMANHO?
-
-    if st.st_size:
-        size = st.st_size
+    if size := st.st_size:        
         # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
-        with io.FileIO(real, 'r') as rfd:
+        with io.FileIO(real, 'r') as fd:
             while size:
                 # TEM QUE ESCREVER DE FORMA ALINHADA
                 if (end + 128*1024*1024) >= len(oview):
-                    end_ = end - (end % 4096)
-                    assert os.write(ofd, oview[:end_]) == end_
+                    end_ = os.write(ofd, oview[:(end//4096) * 4096])
                     oview[:end-end_] = oview[end_:end]
                     end -= end_
-                c = rfd.readinto(oview[end:end+size])
+                c = fd.readinto(oview[end:end+size])
                 assert 1 <= c
                 end += c
                 size -= c
