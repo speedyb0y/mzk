@@ -22,7 +22,7 @@ DIRS_N = len(ALPHABET)**2
 def dhash (i):
     # quantos por diretorio
     q = len(reais) // DIRS_N
-    print(f'q {q} DIRS_N {DIRS_N} i {i}')
+    print(f'{len(reais)} q {q} DIRS_N {DIRS_N} i {i}')
     i //= q
     return '/'.join((        
         ALPHABET[i // len(ALPHABET)],
