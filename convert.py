@@ -211,8 +211,10 @@ try: # THREAD
         originalSize = st.st_size
 
         # NOT SMALL FILES
-        if originalSize < 65536:
+        if originalSize < 128*1024:
             print(f'[{tid}] {original}: SKIPPED (TOO SMALL)')
+            if 1 <= originalSize:
+                os.unlink(original)
             continue
 
         CONVERSION_TIME = int(time.time())
