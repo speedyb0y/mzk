@@ -8,7 +8,9 @@ import time
 import fcntl
 import random
 
-_, volumeName, *inputs = sys.argv
+_, opath, volumeName, *inputs = sys.argv
+
+assert opath.startswith('/')
 
 # TODO:
 assert 1 <= len(volumeName) <= 30
@@ -112,6 +114,10 @@ for a in ALPHABET:
 for i, (r, st, n) in enumerate(reais):
     os.symlink(r, f'{dhash(i)}/{n}')
 
+###############
+
+ofd = 
+
 omap = mmap.mmap(ofd, 512*1024*1024, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, 0)
 # mmap.mmap.madvise
 oview = memoryview(omap)
@@ -124,11 +130,11 @@ open('/tmp/sort', 'w').write('\n'.join(('./.ISOFS64 1', *(f'./{dhash(i)}/{n} -{i
 # GENERATE THE ISOFS, BUT GET ONLY THE HEADER
 pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
-while size < len(oview):
-    got = pipeIO.readinto(oview[size:])
-    if got == 0:
+while end < 512*1024*1024: # TODO: ISOFS 
+    c = pipeIO.readinto(oview[end:end+64*1024*1024])
+    if c == 0:
         break
-    size += got
+    end += c
 pipeIO.close()
 pipe.close()
 
