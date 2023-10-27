@@ -116,15 +116,17 @@ for i, (r, st, n) in enumerate(reais):
 
 #############################################################
 # CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
+
+osize = 64*1024*1024 + len(m) + len(reais) * (256 + 2048) + sum(st.st_size for r, st, n in reais)
+osize = ((osize + 65536 - 1) // 65536) * 65536
+
+
 try:
     os.fallocate(ofd, end)
 except AttributeError:
     assert os.system(f'fallocate -l {osize} /proc/{os.getpid()}/fd/ofd') == 0
 
 ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
-
-osize = 64*1024*1024 + len(m) + len(reais) * (256 + 2048) + sum(st.st_size for r, st, n in reais)
-osize = ((osize + 65536 - 1) // 65536) * 65536
 
 print('OSIZE:', osize)
 
