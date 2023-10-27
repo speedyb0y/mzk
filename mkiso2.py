@@ -109,7 +109,7 @@ os.close(fd)
 
 # CREATE THE DIRECTORIES
 for a in range(DIRS_N):
-    os.mkdir(mhash(a))
+    os.mkdir(mdir(a))
 
 # PUT THE FILES IN THE DIRECTORIES
 for i, (r, st, n) in enumerate(reais):
