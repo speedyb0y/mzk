@@ -316,7 +316,12 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {ORIGINAL_CHANNELS}')
             continue
 
-        if not (10 <= ORIGINAL_DURATION <= 7*24*60*60):
+        if ORIGINAL_DURATION < 15:
+            print(f'[{tid}] {original}: ERROR: BAD DURATION: {ORIGINAL_DURATION}')
+            os.unlink(original)
+            continue
+
+        if not (20 <= ORIGINAL_DURATION <= 7*24*60*60):
             print(f'[{tid}] {original}: ERROR: BAD DURATION: {ORIGINAL_DURATION}')
             continue
 
@@ -360,6 +365,7 @@ try: # THREAD
                 ('PCM_S24BE', 's32',  24, 24)   : ('flac', 24),
                 ('PCM_S24LE', 's32',  24, 24)   : ('flac', 24),
                 ('PCM_S32LE', 's32',  32, 32)   : ('flac', 32),
+                ('PCM_S32BE', 's32',  32, 32)   : ('flac', 32),
                 ('PCM_F32LE', 'flt',  32, None) : ('flac', 32),
                 ('DTS',       'fltp', 0,  None) : ('opus', 24),
                 ('WAVPACK',   'fltp', 0,  32)   : ('opus', 24),
