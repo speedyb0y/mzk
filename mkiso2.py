@@ -118,6 +118,8 @@ for i, (r, st, n) in enumerate(reais):
 # CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
 
 osize = 64*1024*1024 + len(m) + len(reais) * (256 + 2048) + sum(st.st_size for r, st, n in reais)
+#osize = -print-size
+
 osize = ((osize + 65536 - 1) // 65536) * 65536
 
 try:
