@@ -103,10 +103,10 @@ assert os.write(fd, m) == len(m)
 os.close(fd)
 
 # CREATE THE DIRECTORIES
-for a in ALPHABET:
-    os.mkdir(a)
-    for b in ALPHABET:
-        os.mkdir(f'{a}/{b}')
+for d in ALPHABET:
+    os.mkdir(d)
+for d in DIRS:
+    os.mkdir(d)
 
 # PUT THE FILES IN THE DIRECTORIES
 for i, (r, st, n) in enumerate(reais):
@@ -118,9 +118,9 @@ for d in DIRS:
         os.rmdir(d)
     except:
         pass
-for a in ALPHABET:
+for d in ALPHABET:
     try:
-        os.rmdir(a)
+        os.rmdir(d)
     except:
         pass
 
