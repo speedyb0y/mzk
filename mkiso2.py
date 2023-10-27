@@ -221,6 +221,8 @@ while end != end_:
 
 assert os.write(ofd, oview[:end]) == end
 
+assert end <= osize
+
 os.fsync(ofd)
 os.ftruncate(ofd, end)
 os.fsync(ofd)
