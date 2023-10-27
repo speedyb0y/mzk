@@ -187,6 +187,8 @@ pipe.close()
 # PUT ALL THE FILES
 done = end
 
+total = 0
+
 for i, (real, st, new) in enumerate(reais):
 
     print(f'{(done*100)//osize}% {st.st_size} {dhash(i)}/{new} {real}')
@@ -207,6 +209,7 @@ for i, (real, st, new) in enumerate(reais):
                     end_ = (end//4096) * 4096
                     assert os.write(ofd, oview[:end_]) == end_
                     oview[:end-end_] = oview[end_:end]
+                    total += end_
                     end -= end_
                 c = fd.readinto(oview[end:end+size])
                 assert 1 <= c
@@ -221,10 +224,12 @@ while end != end_:
 
 assert os.write(ofd, oview[:end]) == end
 
-assert end <= osize
+total += end
+
+assert total <= osize
 
 os.fsync(ofd)
-os.ftruncate(ofd, end)
+os.ftruncate(ofd, total)
 os.fsync(ofd)
 os.close(ofd)
 
