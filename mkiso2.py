@@ -181,10 +181,11 @@ pipe.close()
 
 #############################################################
 # PUT ALL THE FILES
+done = end
 
 for i, (real, st, new) in enumerate(reais):
 
-    print(f'{(end*100)//osize}% {st.st_size} {dhash(i)}/{new} {real}')
+    print(f'{(done*100)//osize}% {st.st_size} {dhash(i)}/{new} {real}')
 
     # CADA ARQUIVO COMECA EM UM BLOCO
     end_ = ((end + 2048 - 1) // 2048) * 2048
@@ -193,6 +194,7 @@ for i, (real, st, new) in enumerate(reais):
         end += 1
 
     if size := st.st_size:        
+        done += size
         # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
         with io.FileIO(real, 'r') as fd:
             while size:
