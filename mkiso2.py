@@ -130,6 +130,7 @@ oview = memoryview(omap)
 # ORDEM DOS DADOS NO SISTEMA DE ARQUIVOS
 open('/tmp/sort', 'w').write('\n'.join(('./... 1', *(f'./{dhash(i)}/{n} -{i}0' for i, (r, st, n) in enumerate(reais)), '')))
 
+#############################################################
 # GENERATE THE ISOFS, BUT GET ONLY THE HEADER + MAP
 pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
@@ -154,6 +155,7 @@ end = h + len(m)
 
 pipeIO.close()
 pipe.close()
+#############################################################
 
 fd = os.open('/mnt/sda2/teste.iso', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
