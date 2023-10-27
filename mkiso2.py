@@ -128,6 +128,7 @@ osize = ((osize + 65536 - 1) // 65536) * 65536
 print('OSIZE:', osize)
 
 ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
+assert 0 <= ofd
 
 try:
     os.fallocate(ofd, osize)
@@ -156,6 +157,8 @@ while (h := omap.find(b'ISOFS64\x00', 0, end)) == -1:
     if c == 0:
         break
     end += c
+
+print('HEADER AT:', h)
 
 # TERMINA DE LER ELE
 end_ = h + len(m)
