@@ -116,6 +116,7 @@ for i, (r, st, n) in enumerate(reais):
 
 #############################################################
 # CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
+
 ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
 osize = 64*1024*1024 + len(m) + len(reais) * (256 + 2048) + sum(st.st_size for r, st, n in reais)
@@ -157,34 +158,26 @@ end = h + len(m)
 
 pipeIO.close()
 pipe.close()
-#############################################################
 
+#############################################################
+# PUT ALL THE FILES
 
 for real, st, new in reais:
 
     # CADA ARQUIVO COMECA EM UM BLOCO
-    while size != (((size + 2048 - 1) // 2048) * 2048):
-        oview[size:size+1] = b'\x00'
-        size += 1
+    end_ = ((end + 2048 - 1) // 2048) * 2048
+    while end != end_:
+        oview[end:end+1] = b'\x00'
+        end += 1
 
-    # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
-    with io.FileIO(real, 'r') as rfd:
-
-        while True:
-
-            # ESCREVE O QUE DER DE FORMA LINHADA, E MOVE O RESTO PRO INICIO DO BUFFER
-            if (size + 64*1024*1024) > len(oview):
-                remaining = size % 4096
-                vai = size - remaining
-                if vai:
-                    assert os.write(fd, oview[:vai]) == vai
-                oview[:remaining] = oview[vai:vai+remaining]
-                size = remaining
-
-            got = rfd.readinto(oview[size:])
-            if got == 0:
-                break
-            size += got
+    if st.st_size:
+        ate = end + st.st_size
+        # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
+        with io.FileIO(real, 'r') as rfd:
+            while c := rfd.readinto(oview[end:])
+                assert 1 <= c
+                end += c
+        assert end == ate
 
 size = end
 
