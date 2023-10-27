@@ -160,7 +160,7 @@ while (h := omap.find(b'ISOFS64\x00', 0, end)) == -1:
     end += c
 
 print('HEADER AT:', h, repr(omap[:128]))
-assert omap[:128] == oview[:128]
+assert omap[:end] == oview[:end]
 assert 8192 <= h
 
 # TERMINA DE LER ELE
