@@ -114,8 +114,8 @@ for a in ALPHABET:
 for i, (r, st, n) in enumerate(reais):
     os.symlink(r, f'{dhash(i)}/{n}')
 
-###############
-
+#############################################################
+# CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
 ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
 osize = 64*1024*1024 + len(m) + len(reais) * (256 + 2048) + sum(st.st_size for r, st, n in reais)
@@ -159,7 +159,6 @@ pipeIO.close()
 pipe.close()
 #############################################################
 
-fd = os.open('/mnt/sda2/teste.iso', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
 for real, st, new in reais:
 
