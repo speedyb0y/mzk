@@ -194,22 +194,21 @@ for i, (real, st, new) in enumerate(reais):
 
     # TODO: IXME: E SE O ARQUIVO UDAR DE TAMANHO?
 
-    # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
-    with io.FileIO(real, 'r') as rfd:
-        while :
-
-
-            # TEM QUE ESCREVER DE FORMA ALINHADA
-            if (end + 128*1024*1024) >= len(oview):
-                end_ = end - (end % 4096)
-                assert os.write(ofd, oview[:end_]) == end_
-                oview[:end-end_] = oview[end_:end]
-
-            c := rfd.readinto(oview[end:])
-
-            assert 1 <= c
-            end += c
-    
+    if st.st_size:
+        size = st.st_size
+        # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
+        with io.FileIO(real, 'r') as rfd:
+            while size:
+                # TEM QUE ESCREVER DE FORMA ALINHADA
+                if (end + 128*1024*1024) >= len(oview):
+                    end_ = end - (end % 4096)
+                    assert os.write(ofd, oview[:end_]) == end_
+                    oview[:end-end_] = oview[end_:end]
+                    end -= end_
+                c = rfd.readinto(oview[end:end+size])
+                assert 1 <= c
+                end += c
+                size -= c
 
 # FLUSH ANY REMAINING, WITH PADDING, ALIGNED
 end_ = ((end + PADDING + 65536 - 1) // 65536) * 65536
