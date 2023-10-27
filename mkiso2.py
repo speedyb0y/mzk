@@ -69,7 +69,7 @@ def FIOMAP (f):
     block = int.from_bytes(block, byteorder='little', signed=False)
     return ((st.st_dev >> 8), (st.st_dev) & 0xFF), start * block, st, f
 
-reais = reais[:5]
+# reais = reais[:5]
 reais = sorted(map(FIOMAP, reais))
 reais = [(orig, st, new + orig[orig.index('.'):]) for (mm, start, st, orig), new in zip(reais, sorted(mhash() for _ in reais))]
 
@@ -112,8 +112,11 @@ for a in ALPHABET:
 for i, (r, st, n) in enumerate(reais):
     os.symlink(r, f'{dhash(i)}/{n}')
 
-open('list', 'w').write('\n'.join(('.ISOFS64',   *(f'./{dhash(i)}/{n}'        for i, (r, st, n) in enumerate(reais)), '')))
-open('sort', 'w').write('\n'.join(('.ISOFS64 1', *(f'./{dhash(i)}/{n} {-1-i}' for i, (r, st, n) in enumerate(reais)), '')))
+open('/tmp/list', 'w').write('\n'.join(('.ISOFS64',   *(f'./{dhash(i)}/{n}'        for i, (r, st, n) in enumerate(reais)), '')))
+open('/tmp/list', 'w').write('\n'.join(('.ISOFS64',   *ALPHABET, '')))
+
+# ORDEM DOS DADOS NO SISTEMA DE ARQUIVOS
+open('/tmp/sort', 'w').write('\n'.join(('.ISOFS64 1', *(f'./{dhash(i)}/{n} {-1-i}' for i, (r, st, n) in enumerate(reais)), '')))
 
 alloced = mmap.mmap(-1, 512*1024*1024, mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS, mmap.PROT_READ | mmap.PROT_WRITE, 0)
 buff = memoryview(alloced)
@@ -121,7 +124,8 @@ buff = memoryview(alloced)
 size = 0
 
 #
-pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -path-list list -sort sort')
+#-path-list /tmp/list
+pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
 while size < len(buff):
     got = pipeIO.readinto(buff[size:])
@@ -141,30 +145,36 @@ assert (h + len(m)) <= size
 
 size = h + len(m)
 
-fd = os.open('teste.iso', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
+fd = os.open('/mnt/sda2/teste.iso', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
 for real, st, new in reais:
 
-    # POIS NO ISO9660 ELES FICAM ASSIM
+    # CADA ARQUIVO COMECA EM UM BLOCO
     while size != (((size + 2048 - 1) // 2048) * 2048):
         buff[size:size+1] = b'\x00'
         size += 1
 
-    # ESCREVE O QUE DER DE FORMA LINHADA, E MOVE O RESTO PRO INICIO DO BUFFER
-    remaining = size % 4096
-    vai = size - remaining
-    if vai:
-        assert os.write(fd, buff[:vai]) == vai
-    buff[:remaining] = buff[vai:vai+remaining]
-    size = remaining
-
     # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
     with io.FileIO(real, 'r') as rfd:
-        while size < len(buff):
+
+        while True:
+
+            # ESCREVE O QUE DER DE FORMA LINHADA, E MOVE O RESTO PRO INICIO DO BUFFER
+            if (size + 64*1024*1024) > len(buff):
+                remaining = size % 4096
+                vai = size - remaining
+                if vai:
+                    assert os.write(fd, buff[:vai]) == vai
+                buff[:remaining] = buff[vai:vai+remaining]
+                size = remaining
+
             got = rfd.readinto(buff[size:])
             if got == 0:
                 break
             size += got
+
+# AQUELA PARADA
+size += 64*2048
 
 # FLUSH ANY REMAINING
 while size != (((size + 4096 - 1) // 4096) * 4096):
