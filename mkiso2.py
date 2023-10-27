@@ -117,7 +117,10 @@ for i, (r, st, n) in enumerate(reais):
 #############################################################
 # CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
 
-osize = 64*1024*1024 + len(m) + len(reais) * (256 + 2048) + sum(st.st_size for r, st, n in reais)
+# TODO: AQUELE PADDING QUE O MKISOFS FAZ
+PADDING = 128*2048
+
+osize = 512*1024 + DIRS_N*256 + (128 + len(m) + 2048) + sum((128 + st.st_size + 2048) for r, st, n in reais) + PADDING
 #osize = -print-size
 
 osize = ((osize + 65536 - 1) // 65536) * 65536
@@ -186,8 +189,7 @@ for real, st, new in reais:
     assert end == ate
 
 # FLUSH ANY REMAINING, WITH PADDING, ALIGNED
-# TODO: AQUELE PADDING QUE O MKISOFS FAZ
-end_ = ((end + 128*2048 + 65536 - 1) // 65536) * 65536
+end_ = ((end + PADDING + 65536 - 1) // 65536) * 65536
 
 while end != end_:
     oview[end:end+1] = b'\x00'
