@@ -156,7 +156,7 @@ while (h := omap.find(b'ISOFS64\x00', 0, end)) == -1:
     #c = pipeIO.readinto(oview[end:end+4*1024*1024])
     chunk = os.read(pipe.fileno(), 4*1024*1024)
     c = len(chunk)
-    print(f'@ {end} leu {c}')
+    print(f'@ {end} leu {c}', len(omap), len(oview))
     if c == 0:
         break
     oview[end:end+c] = chunk
