@@ -76,8 +76,6 @@ reais = sorted(map(FIOMAP, reais))
 reais = [(orig, st, new + orig[orig.index('.'):]) for (mm, start, st, orig), new in zip(reais, sorted(mhash() for _ in reais))]
 
 # RESERVE THE MAP
-fd = os.open('...', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o0444)
-
 m = ( b'ISOFS64\x00'                                                       # MAGIC
    +              (0).to_bytes(length=8, byteorder='little', signed=False) # CHECKSUM (HDR + FILES HDR)
    +              (0).to_bytes(length=8, byteorder='little', signed=False) # TOTAL SIZE
@@ -101,6 +99,8 @@ ALIGNMENT = 2048
 # ALIGNED SIZE
 m += b'\x00' * ( (((len(m) + ALIGNMENT - 1) // ALIGNMENT) * ALIGNMENT) - len(m) )
 assert len(m) % ALIGNMENT == 0
+
+fd = os.open('.MAP', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o0444)
 assert os.write(fd, m) == len(m)
 os.close(fd)
 
@@ -142,7 +142,7 @@ oview = memoryview(omap)
 
 # ORDEM DOS DADOS NO SISTEMA DE ARQUIVOS
 with open('/tmp/sort', 'w') as fd:
-    fd.write('\n'.join(('./... 1', *(f'./{dhash(i)}/{n} -{1+i}' for i, (r, st, n) in enumerate(reais)), '')))
+    fd.write('\n'.join(('./.MAP 1', *(f'./{dhash(i)}/{n} -{1+i}' for i, (r, st, n) in enumerate(reais)), '')))
 
 os.system('mkisofs -untranslated-filenames -o /mnt/sda2/TESTE.iso.tmp --follow-links -sort /tmp/sort .')
 
