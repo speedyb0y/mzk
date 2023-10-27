@@ -108,7 +108,7 @@ assert os.write(fd, m) == len(m)
 os.close(fd)
 
 # CREATE THE DIRECTORIES
-for a in DIRS_N:
+for a in range(DIRS_N):
     os.mkdir(mhash(a))
 
 # PUT THE FILES IN THE DIRECTORIES
