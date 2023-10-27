@@ -17,13 +17,13 @@ assert 1 <= len(volumeName) <= 30
 
 ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-DIRS_N = 256
+DIRS_N = len(ALPHABET)**2
 
 def dhash (i):
     i %= DIRS_N
-    return '/'.join((
-        ALPHABET[i %  len(ALPHABET)],
-        ALPHABET[i // len(ALPHABET)]
+    return '/'.join((        
+        ALPHABET[i // len(ALPHABET)],
+        ALPHABET[i %  len(ALPHABET)]
     ))
 
 def mhash ():
