@@ -23,12 +23,15 @@ def dhash (i):
     # quantos por diretorio
     q = len(reais) // DIRS_N
     i //= q
+    print(f'{len(reais)} q {q} DIRS_N {DIRS_N} i {i} -> ?')
     d = '/'.join((        
         ALPHABET[i // len(ALPHABET)],
         ALPHABET[i %  len(ALPHABET)]
     ))
     print(f'{len(reais)} q {q} DIRS_N {DIRS_N} i {i} -> {d}')
     return d
+
+# TODO: REMDIR TODOS OS DIRETIORIOS PARE ELIMINAR OS VAZIOS
 
 def mhash ():
 
