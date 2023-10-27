@@ -170,25 +170,19 @@ for real, st, new in reais:
         oview[end:end+1] = b'\x00'
         end += 1
 
-    if st.st_size:
-        ate = end + st.st_size
-        # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
-        with io.FileIO(real, 'r') as rfd:
-            while c := rfd.readinto(oview[end:])
-                assert 1 <= c
-                end += c
-        assert end == ate
+    ate = end + st.st_size
+    # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
+    with io.FileIO(real, 'r') as rfd:
+        while c := rfd.readinto(oview[end:])
+            assert 1 <= c
+            end += c
+    assert end == ate
 
-size = end
-
+# FLUSH ANY REMAINING, WITH PADDING, ALIGNED
 # TODO: AQUELE PADDING QUE O MKISOFS FAZ
-size += 128*2048
+end_ = ((end + 128*2048 + 65536 - 1) // 65536) * 65536
 
-# ALIGN
-size = (((size + 65536 - 1) // 65536) * 65536)
-
-# FLUSH ANY REMAINING
-while end != size:
+while end != end_:
     oview[end:end+1] = b'\x00'
     end += 1
 
@@ -196,6 +190,6 @@ oview.release()
 omap.close()
 
 os.fsync(ofd)
-os.ftruncate(ofd, size)
+os.ftruncate(ofd, end)
 os.fsync(ofd)
 os.close(ofd)
