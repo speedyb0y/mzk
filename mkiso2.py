@@ -76,7 +76,7 @@ reais = sorted(map(FIOMAP, reais))
 reais = [(orig, st, new + orig[orig.index('.'):]) for (mm, start, st, orig), new in zip(reais, sorted(mhash() for _ in reais))]
 
 # RESERVE THE MAP
-fd = os.open('.ISOFS64', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o0444)
+fd = os.open('...', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o0444)
 
 m = ( b'ISOFS64\x00'                                                       # MAGIC
    +              (0).to_bytes(length=8, byteorder='little', signed=False) # CHECKSUM (HDR + FILES HDR)
@@ -116,37 +116,44 @@ for i, (r, st, n) in enumerate(reais):
 
 ###############
 
-ofd = 
+ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
-omap = mmap.mmap(ofd, 512*1024*1024, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, 0)
+osize = 64*1024*1024 + len(m) + len(reais) * (256 + 2048) + sum(st.st_size for r, st, n in reais)
+osize = ((osize + 65536 - 1) // 65536) * 65536
+
+print('OSIZE:', osize)
+
+omap = mmap.mmap(ofd, osize, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, 0)
 # mmap.mmap.madvise
 oview = memoryview(omap)
 
-size = 0
-
 # ORDEM DOS DADOS NO SISTEMA DE ARQUIVOS
-open('/tmp/sort', 'w').write('\n'.join(('./.ISOFS64 1', *(f'./{dhash(i)}/{n} -{i}0' for i, (r, st, n) in enumerate(reais)), '')))
+open('/tmp/sort', 'w').write('\n'.join(('./... 1', *(f'./{dhash(i)}/{n} -{i}0' for i, (r, st, n) in enumerate(reais)), '')))
 
-# GENERATE THE ISOFS, BUT GET ONLY THE HEADER
+# GENERATE THE ISOFS, BUT GET ONLY THE HEADER + MAP
 pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
-while end < 512*1024*1024: # TODO: ISOFS 
-    c = pipeIO.readinto(oview[end:end+64*1024*1024])
+
+end = 0
+
+# ACHA O NOSSO READER
+while (h := omap.find(b'ISOFS64\x00', 0, end)) == -1:
+    c = pipeIO.readinto(oview[end:end+8*1024*1024])
     if c == 0:
         break
     end += c
+
+# TERMINA DE LER ELE
+while end < (h + len(m)):
+    c = pipeIO.readinto(oview[end:h+len(m)])
+    assert 1 <= c
+    end += c
+
+# PODE TER LIDO MAIS
+end = h + len(m)
+
 pipeIO.close()
 pipe.close()
-
-# FIND OUR HEADER
-h = omap.find(b'ISOFS64\x00')
-assert 4096 <= h
-h = omap.find(b'ISOFS64\x00', h + 8)
-assert 8192 <= h
-
-assert (h + len(m)) <= size
-
-size = h + len(m)
 
 fd = os.open('/mnt/sda2/teste.iso', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
