@@ -196,7 +196,9 @@ while end != end_:
     oview[end:end+1] = b'\x00'
     end += 1
 
+omap.flush()
 oview.release()
+omap.flush()
 omap.close()
 
 os.fsync(ofd)
