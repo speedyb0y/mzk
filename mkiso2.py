@@ -115,13 +115,13 @@ for i, (r, st, n) in enumerate(reais):
 open('list', 'w').write('\n'.join(('.ISOFS64',   *(f'./{dhash(i)}/{n}'        for i, (r, st, n) in enumerate(reais)), '')))
 open('sort', 'w').write('\n'.join(('.ISOFS64 1', *(f'./{dhash(i)}/{n} {-1-i}' for i, (r, st, n) in enumerate(reais)), '')))
 
-alloced = mmap.mmap(-1, 1024*1024*128, mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS, mmap.PROT_READ | mmap.PROT_WRITE, 0)
+alloced = mmap.mmap(-1, 512*1024*1024, mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS, mmap.PROT_READ | mmap.PROT_WRITE, 0)
 buff = memoryview(alloced)
 
 size = 0
 
 #
-pipe = os.popen('mkisofs -untranslated-filenames -o - --follow-links -path-list list -sort sort')
+pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -path-list list -sort sort')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
 while size < len(buff):
     got = pipeIO.readinto(buff[size:])
@@ -130,8 +130,6 @@ while size < len(buff):
     size += got
 pipeIO.close()
 pipe.close()
-
-print('GOT:', size, buff[:1000])
 
 # FIND OUR HEADER
 h = alloced.find(b'ISOFS64\x00')
@@ -142,33 +140,37 @@ assert 8192 <= h
 assert (h + len(m)) <= size
 
 size = h + len(m)
-size = ((size + 2048 - 1) // 2048) * 2048
 
 fd = os.open('teste.iso', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
 for real, st, new in reais:
+
+    # POIS NO ISO9660 ELES FICAM ASSIM
+    while size != (((size + 2048 - 1) // 2048) * 2048):
+        buff[size:size+1] = b'\x00'
+        size += 1
+
+    # ESCREVE O QUE DER DE FORMA LINHADA, E MOVE O RESTO PRO INICIO DO BUFFER
+    remaining = size % 4096
+    vai = size - remaining
+    if vai:
+        assert os.write(fd, buff[:vai]) == vai
+    buff[:remaining] = buff[vai:vai+remaining]
+    size = remaining
+
+    # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
     with io.FileIO(real, 'r') as rfd:
         while size < len(buff):
             got = rfd.readinto(buff[size:])
             if got == 0:
                 break
             size += got
-        # POIS NO ISO9660 ELES FICAM ASSIM
-        size = ((size + 2048 - 1) // 2048) * 2048
-        # ESCREVE O QUE DER DE FORMA LINHADA, E MOVE O RESTO PRO INICIO DO BUFFER
-        remaining = size % 4096
-        vai = size - remaining
-        if vai:
-            assert os.write(fd, buff[:vai]) == vai
-        buff[:remaining] = buff[vai:vai+remaining]
-        size = remaining
 
-# flush any remaining
-size = ((size + 4096 - 1) // 4096) * 4096
-if size > len(alloced):
-   size = len(alloced)
-
-
+# FLUSH ANY REMAINING
+while size != (((size + 4096 - 1) // 4096) * 4096):
+    buff[size:size+1] = b'\x00'
+    size += 1
+assert os.write(fd, buff[:size]) == size
 
 #os.fsync
 os.close(fd)
