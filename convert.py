@@ -368,6 +368,7 @@ try: # THREAD
                 ('PCM_S32BE', 's32',  32, 32)   : ('flac', 32),
                 ('PCM_F32LE', 'flt',  32, None) : ('flac', 32),
                 ('DTS',       'fltp', 0,  None) : ('opus', 24),
+                ('WAVPACK',   's16p', 0,  16)   : ('opus', 24),
                 ('WAVPACK',   'fltp', 0,  32)   : ('opus', 24),
                 ('MP3',       'fltp', 0,  None) : ('opus', 24),
                 ('AAC',       'fltp', 0,  None) : ('opus', 24),
