@@ -193,13 +193,11 @@ for real, st, new in reais:
     assert end == ate
 
 # FLUSH ANY REMAINING, WITH PADDING, ALIGNED
-end_ = ((end + PADDING + 65536 - 1) // 65536) * 65536
+end = ((end + PADDING + 65536 - 1) // 65536) * 65536
 
-while end != end_:
-    oview[end:end+1] = b'\x00'
-    end += 1
+oview[end] = b'\x00'
 
-omap.flush()
+print('CLOSING...', end)
 oview.release()
 omap.flush()
 omap.close()
