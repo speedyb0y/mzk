@@ -178,7 +178,7 @@ pipe.close()
 
 for real, st, new in reais:
 
-    print(st.st_size, real)
+    print(st.st_size, new, real)
 
     # CADA ARQUIVO COMECA EM UM BLOCO
     end_ = ((end + 2048 - 1) // 2048) * 2048
