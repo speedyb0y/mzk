@@ -127,11 +127,13 @@ omap = mmap.mmap(ofd, osize, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, 
 # mmap.mmap.madvise
 oview = memoryview(omap)
 
-# ORDEM DOS DADOS NO SISTEMA DE ARQUIVOS
-open('/tmp/sort', 'w').write('\n'.join(('./... 1', *(f'./{dhash(i)}/{n} -{i}0' for i, (r, st, n) in enumerate(reais)), '')))
-
 #############################################################
 # GENERATE THE ISOFS, BUT GET ONLY THE HEADER + MAP
+
+# ORDEM DOS DADOS NO SISTEMA DE ARQUIVOS
+with open('/tmp/sort', 'w') as fd:
+    fd.write('\n'.join(('./... 1', *(f'./{dhash(i)}/{n} -{1+i}' for i, (r, st, n) in enumerate(reais)), '')))
+
 pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
 
