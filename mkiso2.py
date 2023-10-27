@@ -76,7 +76,7 @@ def FIOMAP (f):
 
 # reais = reais[:5]
 reais = sorted(map(FIOMAP, reais))
-reais = [(orig, st, new + orig[orig.index('.'):]) for (mm, start, st, orig), new in zip(reais, sorted(mhash() for _ in reais))]
+reais = [(orig, st, new + orig[orig.find('.'):]) for (mm, start, st, orig), new in zip(reais, sorted(mhash() for _ in reais))]
 
 # RESERVE THE MAP
 m = ( b'ISOFS64\x00'                                                       # MAGIC
