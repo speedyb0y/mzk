@@ -147,13 +147,16 @@ with open('/tmp/sort', 'w') as fd:
 os.system('mkisofs -untranslated-filenames -o /mnt/sda2/TESTE.iso.tmp --follow-links -sort /tmp/sort .')
 
 pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
-pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
+#pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
 
 end = 0
 
 # ACHA O NOSSO READER
 while (h := omap.find(b'ISOFS64\x00', 0, end)) == -1:
-    c = pipeIO.readinto(oview[end:end+4*1024*1024])
+    #c = pipeIO.readinto(oview[end:end+4*1024*1024])
+    chunk = pipe.read(4*1024*1024)
+    c = len(chunk)
+    oview[end:end+c] = chunk
     print(f'@ {end} leu {c}')
     if c == 0:
         break
