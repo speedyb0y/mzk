@@ -173,7 +173,7 @@ for real, st, new in reais:
     ate = end + st.st_size
     # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
     with io.FileIO(real, 'r') as rfd:
-        while c := rfd.readinto(oview[end:])
+        while c := rfd.readinto(oview[end:]):
             assert 1 <= c
             end += c
     assert end == ate
