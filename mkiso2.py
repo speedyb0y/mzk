@@ -116,6 +116,10 @@ for i, (r, st, n) in enumerate(reais):
 
 #############################################################
 # CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
+try:
+    os.fallocate(ofd, end)
+except AttributeError
+    assert os.system(f'fallocate -l {osize} /proc/{os.getpid()}/fd/ofd') == 0
 
 ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
 
