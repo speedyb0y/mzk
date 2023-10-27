@@ -152,19 +152,20 @@ end = 0
 
 # ACHA O NOSSO READER
 while (h := omap.find(b'ISOFS64\x00', 0, end)) == -1:
-    c = pipeIO.readinto(oview[end:end+8*1024*1024])
+    c = pipeIO.readinto(oview[end:end+4*1024*1024])
     if c == 0:
         break
     end += c
 
 # TERMINA DE LER ELE
-while end < (h + len(m)):
-    c = pipeIO.readinto(oview[end:h+len(m)])
+end_ = h + len(m)
+while end < end_:
+    c = pipeIO.readinto(oview[end:end_])
     assert 1 <= c
     end += c
 
 # PODE TER LIDO MAIS
-end = h + len(m)
+end = end_
 
 pipeIO.close()
 pipe.close()
