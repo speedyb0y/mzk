@@ -125,14 +125,14 @@ osize = 512*1024 + DIRS_N*256 + (128 + len(m) + 2048) + sum((128 + st.st_size + 
 
 osize = ((osize + 65536 - 1) // 65536) * 65536
 
+print('OSIZE:', osize)
+
+ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
+
 try:
     os.fallocate(ofd, osize)
 except AttributeError:
     assert os.system(f'fallocate -l {osize} /proc/{os.getpid()}/fd/{ofd}') == 0
-
-ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
-
-print('OSIZE:', osize)
 
 omap = mmap.mmap(ofd, osize, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, 0)
 # mmap.mmap.madvise
