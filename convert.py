@@ -9,6 +9,7 @@ import json
 import re
 import traceback
 import mmap
+import random
 
 #export LC_ALL=en_US.UTF-8
 
@@ -59,11 +60,25 @@ assert version('flac     --version', 'flac')
 assert version('metaflac --version', 'metaflac')
 assert version('soxi',               'soxi')
 
-def mhash (length, alphabet='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'):
-    assert isinstance(length, int) and 1 <= length <= 512
-    f = sum(int(x()*1000000) for x in (os.getpid, time.time, time.time_ns, time.monotonic, time.monotonic_ns))
-    code  = ''.join(alphabet[(x + f) % len(alphabet)] for x in os.read(RANDOMFD, length))
-    assert len(code) == length
+ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+def mhash (length):
+
+    f  = int.from_bytes(os.read(RANDOMFD, 8), byteorder = 'little', signed=False)
+    f += int(time.time() * 1000000)
+    f += int(time.monotonic() * 1000000)
+    f += int(random.random() * 0xFFFFFFFFFFFFFFFF)
+    f += f >> 48
+    f %= len(ALPHABET) ** length
+
+    code = ''
+
+    while f:
+        code += ALPHABET[f % len(ALPHABET)]
+        f //= len(ALPHABET)
+
+    code += ALPHABET[0] * (length - len(code))
+
     return code
 
 PID = os.getpid()
@@ -73,8 +88,8 @@ assert 1 <= PID <= 0xFFFFFFFF
 RANDOMFD = os.open('/dev/urandom', os.O_RDONLY)
 assert 0 <= RANDOMFD <= 10
 
-TNAME = mhash(16)
-assert len(TNAME) == 16
+TNAME = mhash(13)
+assert len(TNAME) == 13
 
 CPUS = open('/proc/cpuinfo').read().count('processor\t:')
 assert 1 <= CPUS <= 512
@@ -125,11 +140,10 @@ if tid == CPUS:
     os.close(pipeIn)
 
     try:
-        for _ in range(3): # REPETE
-            for f in sys.argv[1:]:
-                for f in os.popen(f"find '{f}' -type f -print0").read(8*1024*1024).encode().split(b'\x00'):
-                    if re.match(b'^.*[.](mp3|aac|flac|wav|mp4|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
-                        os.write(pipeOut, f)
+        for f in sys.argv[1:]:
+            for f in os.popen(f"find '{f}' -type f -print0").read(8*1024*1024).encode().split(b'\x00'):
+                if re.match(b'^.*[.](mp3|aac|flac|wav|mp4|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
+                    os.write(pipeOut, f)
     except KeyboardInterrupt:
         pass
 
@@ -496,7 +510,7 @@ try: # THREAD
             where, tmp = bad
 
         # NOW COPY FROM TEMP
-        new = f'{where}/{mhash(10)}.{fmt}'
+        new = f'{where}/{mhash(12)}.{fmt}'
 
         #
         o = os.open(tmp, os.O_WRONLY | os.O_DIRECT | os.O_CREAT | os.O_EXCL, 0o644)

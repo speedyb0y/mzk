@@ -2,21 +2,29 @@
 
 import sys
 import os
+import io
+import mmap
 import time
 import fcntl
 import random
 
-_, volumeName, volumeID, *inputs = sys.argv
+_, volumeName, *inputs = sys.argv
 
 # TODO:
 assert 1 <= len(volumeName) <= 30
 
-volumeID = int(volumeID)
-assert 0 <= volumeID <= 0xFF
-
 ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-def mhash (ext):
+DIRS_N = 256
+
+def dhash (i):
+    i %= DIRS_N
+    return '/'.join((
+        ALPHABET[i %  len(ALPHABET)],
+        ALPHABET[i // len(ALPHABET)]
+    ))
+
+def mhash ():
 
     f  = int.from_bytes(os.read(RANDOMFD, 8), byteorder = 'little', signed=False)
     f += int(time.time() * 1000000)
@@ -32,7 +40,6 @@ def mhash (ext):
         f //= len(ALPHABET)
 
     code += ALPHABET[0] * (12 - len(code))
-    code += ext
 
     return code
 
@@ -48,7 +55,7 @@ for d in inputs:
     except TimeoutError:
         reais.append(d)
 
-# REORDENA CONFORME A POSICAO NO DISCO
+# REORDENA CONFORME O DISCO E A POSICAO NO DISCO
 def FIOMAP (f):
     start = bytearray(b'\x00'*8)
     block = bytearray(b'\x00'*8)
@@ -60,55 +67,111 @@ def FIOMAP (f):
     os.close(fd)
     start = int.from_bytes(start, byteorder='little', signed=False)
     block = int.from_bytes(block, byteorder='little', signed=False)
-    return ((st.st_dev >> 8), (st.st_dev) & 0xFF), start * block, st.st_size, f
+    return ((st.st_dev >> 8), (st.st_dev) & 0xFF), start * block, st, f
 
+reais = reais[:5]
 reais = sorted(map(FIOMAP, reais))
-
-'''
-DEVICES = {}
-
-def devfd (mj):
-    try:
-        fd = DEVICES[mj]
-    except KeyError:
-        fd = DEVICES[mj] = os.open(f'/dev/block/{mj[0]}:{mj[1]}', os.O_RDONLY | os.O_CLOEXEC)
-    return fd
-
-[print(os.pread(devfd(mj), 8, start)) for mj, start, size, f in reais]
-'''
-
-reais = [(r, mhash(r[r.index('.'):])) for _, _, _, r in reais]
+reais = [(orig, st, new + orig[orig.index('.'):]) for (mm, start, st, orig), new in zip(reais, sorted(mhash() for _ in reais))]
 
 # RESERVE THE MAP
-fd = os.open('.ISOFS64', os.O_WRONLY | os.O_CREAT | os.O_CREAT, 0o0444)
+fd = os.open('.ISOFS64', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o0444)
 
-m = ( b'ISOFS64\x00' +
-            volumeName.encode() + b'\x00' * (4*8 - 2 - len(volumeName)) +
-            volumeID.to_bytes(length=2, byteorder='little', signed=False) +
-    int(time.time()).to_bytes(length=4, byteorder='little', signed=False) +
-          len(reais).to_bytes(length=4, byteorder='little', signed=False) +
-                 (0).to_bytes(length=8, byteorder='little', signed=False) +
-                 (0).to_bytes(length=8, byteorder='little', signed=False) +
-    b''.join(name.encode() + b'\x00' * (64 - len(name)) for r, name in reais)
+m = ( b'ISOFS64\x00'                                                       # MAGIC
+   +              (0).to_bytes(length=8, byteorder='little', signed=False) # CHECKSUM (HDR + FILES HDR)
+   +              (0).to_bytes(length=8, byteorder='little', signed=False) # TOTAL SIZE
+   + int(time.time()).to_bytes(length=4, byteorder='little', signed=False) # CREATION TIME
+   +       len(reais).to_bytes(length=4, byteorder='little', signed=False) # NUMBER OF FILES
+   +         volumeName.encode() + b'\x00' * (32 - len(volumeName))        # LABEL
+   + b''.join( (
+        (0).to_bytes(length=8, byteorder='little', signed=False) # OFFSET
+   +    st.st_size.to_bytes(length=8, byteorder='little', signed=False) # SIZE
+   + int(0).to_bytes(length=4, byteorder='little', signed=False) # CREATION TIME
+   + int(st.st_mtime).to_bytes(length=4, byteorder='little', signed=False) # MODIFIED TIME
+   +    (0).to_bytes(length=8, byteorder='little', signed=False) # CHECKSUM OF FILE
+   +    name.encode() + b'\x00' * (32 - len(name))               # NAME
+   )  for r, st, name in reais)
 )
 
 assert len(m) == (1 + len(reais)) * 64
 
+ALIGNMENT = 2048
+
 # ALIGNED SIZE
-m += b'\x00' * ( (((len(m) + 65536 - 1) // 65536) * 65536) - len(m) )
-assert len(m) % 65536 == 0
+m += b'\x00' * ( (((len(m) + ALIGNMENT - 1) // ALIGNMENT) * ALIGNMENT) - len(m) )
+assert len(m) % ALIGNMENT == 0
 assert os.write(fd, m) == len(m)
 os.close(fd)
 
+# CREATE THE DIRECTORIES
+for a in ALPHABET:
+    os.mkdir(a)
+    for b in ALPHABET:
+        os.mkdir(f'{a}/{b}')
+
+# PUT THE FILES IN THE DIRECTORIES
+for i, (r, st, n) in enumerate(reais):
+    os.symlink(r, f'{dhash(i)}/{n}')
+
+open('list', 'w').write('\n'.join(('.ISOFS64',   *(f'./{dhash(i)}/{n}'        for i, (r, st, n) in enumerate(reais)), '')))
+open('sort', 'w').write('\n'.join(('.ISOFS64 1', *(f'./{dhash(i)}/{n} {-1-i}' for i, (r, st, n) in enumerate(reais)), '')))
+
+alloced = mmap.mmap(-1, 1024*1024*128, mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS, mmap.PROT_READ | mmap.PROT_WRITE, 0)
+buff = memoryview(alloced)
+
+size = 0
+
 #
-for r, n in reais:
-    os.symlink(r, n)
+pipe = os.popen('mkisofs -untranslated-filenames -o - --follow-links -path-list list -sort sort')
+pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
+while size < len(buff):
+    got = pipeIO.readinto(buff[size:])
+    if got == 0:
+        break
+    size += got
+pipeIO.close()
+pipe.close()
 
-###
-reais = *reais[:25], *reais[100:100+25], *reais[-25:]
-###
+print('GOT:', size, buff[:1000])
 
-open('/tmp/mk.list', 'w').write('.ISOFS64\n'   + '\n'.join(   n        for     r, n  in reais) + '\n')
-open('/tmp/mk.sort', 'w').write('.ISOFS64 1\n' + '\n'.join(f'{n} -{i}' for i, (r, n) in enumerate(reais, 1)) + '\n')
+# FIND OUR HEADER
+h = alloced.find(b'ISOFS64\x00')
+assert 4096 <= h
+h = alloced.find(b'ISOFS64\x00', h + 8)
+assert 8192 <= h
 
-# mkisofs  -o /tmp/teste.iso --follow-links -path-list /tmp/mk.list -sort /tmp/mk.sort
+assert (h + len(m)) <= size
+
+size = h + len(m)
+size = ((size + 2048 - 1) // 2048) * 2048
+
+fd = os.open('teste.iso', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
+
+for real, st, new in reais:
+    with io.FileIO(real, 'r') as rfd:
+        while size < len(buff):
+            got = rfd.readinto(buff[size:])
+            if got == 0:
+                break
+            size += got
+        # POIS NO ISO9660 ELES FICAM ASSIM
+        size = ((size + 2048 - 1) // 2048) * 2048
+        # ESCREVE O QUE DER DE FORMA LINHADA, E MOVE O RESTO PRO INICIO DO BUFFER
+        remaining = size % 4096
+        vai = size - remaining
+        if vai:
+            assert os.write(fd, buff[:vai]) == vai
+        buff[:remaining] = buff[vai:vai+remaining]
+        size = remaining
+
+# flush any remaining
+size = ((size + 4096 - 1) // 4096) * 4096
+if size > len(alloced):
+   size = len(alloced)
+
+
+
+#os.fsync
+os.close(fd)
+
+buff.release()
+alloced.close()
