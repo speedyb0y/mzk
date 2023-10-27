@@ -112,23 +112,20 @@ for a in ALPHABET:
 for i, (r, st, n) in enumerate(reais):
     os.symlink(r, f'{dhash(i)}/{n}')
 
-open('/tmp/list', 'w').write('\n'.join(('.ISOFS64',   *(f'./{dhash(i)}/{n}'        for i, (r, st, n) in enumerate(reais)), '')))
-open('/tmp/list', 'w').write('\n'.join(('.ISOFS64',   *ALPHABET, '')))
-
-# ORDEM DOS DADOS NO SISTEMA DE ARQUIVOS
-open('/tmp/sort', 'w').write('\n'.join(('.ISOFS64 1', *(f'./{dhash(i)}/{n} {-1-i}' for i, (r, st, n) in enumerate(reais)), '')))
-
-alloced = mmap.mmap(-1, 512*1024*1024, mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS, mmap.PROT_READ | mmap.PROT_WRITE, 0)
-buff = memoryview(alloced)
+omap = mmap.mmap(ofd, 512*1024*1024, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, 0)
+# mmap.mmap.madvise
+oview = memoryview(omap)
 
 size = 0
 
-#
-#-path-list /tmp/list
+# ORDEM DOS DADOS NO SISTEMA DE ARQUIVOS
+open('/tmp/sort', 'w').write('\n'.join(('./.ISOFS64 1', *(f'./{dhash(i)}/{n} -{i}0' for i, (r, st, n) in enumerate(reais)), '')))
+
+# GENERATE THE ISOFS, BUT GET ONLY THE HEADER
 pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
-while size < len(buff):
-    got = pipeIO.readinto(buff[size:])
+while size < len(oview):
+    got = pipeIO.readinto(oview[size:])
     if got == 0:
         break
     size += got
@@ -136,9 +133,9 @@ pipeIO.close()
 pipe.close()
 
 # FIND OUR HEADER
-h = alloced.find(b'ISOFS64\x00')
+h = omap.find(b'ISOFS64\x00')
 assert 4096 <= h
-h = alloced.find(b'ISOFS64\x00', h + 8)
+h = omap.find(b'ISOFS64\x00', h + 8)
 assert 8192 <= h
 
 assert (h + len(m)) <= size
@@ -151,7 +148,7 @@ for real, st, new in reais:
 
     # CADA ARQUIVO COMECA EM UM BLOCO
     while size != (((size + 2048 - 1) // 2048) * 2048):
-        buff[size:size+1] = b'\x00'
+        oview[size:size+1] = b'\x00'
         size += 1
 
     # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
@@ -160,30 +157,36 @@ for real, st, new in reais:
         while True:
 
             # ESCREVE O QUE DER DE FORMA LINHADA, E MOVE O RESTO PRO INICIO DO BUFFER
-            if (size + 64*1024*1024) > len(buff):
+            if (size + 64*1024*1024) > len(oview):
                 remaining = size % 4096
                 vai = size - remaining
                 if vai:
-                    assert os.write(fd, buff[:vai]) == vai
-                buff[:remaining] = buff[vai:vai+remaining]
+                    assert os.write(fd, oview[:vai]) == vai
+                oview[:remaining] = oview[vai:vai+remaining]
                 size = remaining
 
-            got = rfd.readinto(buff[size:])
+            got = rfd.readinto(oview[size:])
             if got == 0:
                 break
             size += got
 
-# AQUELA PARADA
-size += 64*2048
+size = end
+
+# TODO: AQUELE PADDING QUE O MKISOFS FAZ
+size += 128*2048
+
+# ALIGN
+size = (((size + 65536 - 1) // 65536) * 65536)
 
 # FLUSH ANY REMAINING
-while size != (((size + 4096 - 1) // 4096) * 4096):
-    buff[size:size+1] = b'\x00'
-    size += 1
-assert os.write(fd, buff[:size]) == size
+while end != size:
+    oview[end:end+1] = b'\x00'
+    end += 1
 
-#os.fsync
-os.close(fd)
+oview.release()
+omap.close()
 
-buff.release()
-alloced.close()
+os.fsync(ofd)
+os.ftruncate(ofd, size)
+os.fsync(ofd)
+os.close(ofd)
