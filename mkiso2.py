@@ -127,8 +127,8 @@ osize = ((osize + 65536 - 1) // 65536) * 65536
 
 print('OSIZE:', osize)
 
-ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_DIRECT, 0o0444)
-assert 0 <= ofd
+ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o0444)
+assert 0 <= ofd #  | os.O_DIRECT
 
 try:
     os.fallocate(ofd, osize)
