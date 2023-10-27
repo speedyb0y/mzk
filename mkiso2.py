@@ -8,6 +8,12 @@ import time
 import fcntl
 import random
 
+#
+DISK_BLOCK = 65536
+
+#
+ISO_BLOCK = 2048
+
 _, opath, volumeName, *inputs = sys.argv
 
 assert opath.startswith('/')
@@ -91,11 +97,9 @@ m = ( b'ISOFS64\x00'                                                       # MAG
 
 assert len(m) == (1 + len(reais)) * 64
 
-ALIGNMENT = 2048
-
 # ALIGNED SIZE
-m += b'\x00' * ( (((len(m) + ALIGNMENT - 1) // ALIGNMENT) * ALIGNMENT) - len(m) )
-assert len(m) % ALIGNMENT == 0
+m += b'\x00' * ( (((len(m) + ISO_BLOCK - 1) // ISO_BLOCK) * ISO_BLOCK) - len(m) )
+assert len(m) % ISO_BLOCK == 0
 
 fd = os.open('...', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o0444)
 assert os.write(fd, m) == len(m)
@@ -125,9 +129,9 @@ for d in ALPHABET:
 # CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
 
 # TODO: AQUELE PADDING QUE O MKISOFS FAZ
-PADDING = 128*2048
+PADDING = 128*ISO_BLOCK
 
-osize = ((8*1024*1024 + len(DIRS)*256 + (128 + len(m) + 2048) + sum((128 + st.st_size + 2048) for r, st, n in reais) + PADDING + 65536 - 1) // 65536) * 65536
+osize = ((8*1024*1024 + len(DIRS)*256 + (128 + len(m) + ISO_BLOCK) + sum((128 + st.st_size + ISO_BLOCK) for r, st, n in reais) + PADDING + DISK_BLOCK - 1) // DISK_BLOCK) * DISK_BLOCK
 #osize = -print-size
 
 print('OSIZE:', osize)
@@ -140,7 +144,7 @@ try:
 except AttributeError:
     assert os.system(f'fallocate -l {osize} /proc/{os.getpid()}/fd/{ofd}') == 0
 
-obuff = mmap.mmap(-1, 768*1024*1024, mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS, mmap.PROT_READ | mmap.PROT_WRITE, 0)
+obuff = mmap.mmap(-1, 1*1024*1024*1024, mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS, mmap.PROT_READ | mmap.PROT_WRITE, 0)
 oview = memoryview(obuff)
 
 #############################################################
@@ -188,7 +192,7 @@ for i, (real, st, new) in enumerate(reais):
     print(f'{(done*100)//osize}% {st.st_size} {dhash(i)}/{new} {real}')
 
     # CADA ARQUIVO COMECA EM UM BLOCO
-    end_ = ((end + 2048 - 1) // 2048) * 2048
+    end_ = ((end + ISO_BLOCK - 1) // ISO_BLOCK) * ISO_BLOCK
     while end != end_:
         oview[end:end+1] = b'\x00'
         end += 1
@@ -200,7 +204,8 @@ for i, (real, st, new) in enumerate(reais):
             while size:
                 # TEM QUE ESCREVER DE FORMA ALINHADA
                 if (end + 128*1024*1024) >= len(oview):
-                    end_ = os.write(ofd, oview[:(end//4096) * 4096])
+                    end_ = (end//4096) * 4096
+                    assert os.write(ofd, oview[:end_]) == end_
                     oview[:end-end_] = oview[end_:end]
                     end -= end_
                 c = fd.readinto(oview[end:end+size])
@@ -209,7 +214,7 @@ for i, (real, st, new) in enumerate(reais):
                 size -= c
 
 # FLUSH ANY REMAINING, WITH PADDING, ALIGNED
-end_ = ((end + PADDING + 65536 - 1) // 65536) * 65536
+end_ = ((end + PADDING + DISK_BLOCK - 1) // DISK_BLOCK) * DISK_BLOCK
 while end != end_:
     oview[end:end+1] = b'\x00'
     end += 1
