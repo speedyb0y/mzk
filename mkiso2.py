@@ -147,7 +147,7 @@ with open('/tmp/sort', 'w') as fd:
 os.system('mkisofs -untranslated-filenames -o /mnt/sda2/TESTE.iso.tmp --follow-links -sort /tmp/sort .')
 
 pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
-#pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
+pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
 
 end = 0
 
