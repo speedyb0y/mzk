@@ -22,6 +22,11 @@ DIRS = [f'{a}/{b}' for a in ALPHABET for b in ALPHABET]
 def dhash (i):
     # QUANTOS POR DIRETORIO
     q = (len(reais) // len(DIRS)) + ((len(reais) % len(DIRS)) != 0)
+    #i //= q
+    #return '/'.join((        
+    #    ALPHABET[i // len(ALPHABET)],
+    #    ALPHABET[i %  len(ALPHABET)]
+    #))
     return DIRS[i // q]
 
 def mhash ():
