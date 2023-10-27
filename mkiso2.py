@@ -20,7 +20,9 @@ ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 DIRS_N = len(ALPHABET)**2
 
 def dhash (i):
-    i %= len(ALPHABET) ** 2
+    # quantos por diretorio
+    q = len(reais) // DIRS_N
+    i //= q
     return '/'.join((        
         ALPHABET[i // len(ALPHABET)],
         ALPHABET[i %  len(ALPHABET)]
