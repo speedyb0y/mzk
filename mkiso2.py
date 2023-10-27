@@ -17,18 +17,12 @@ assert 1 <= len(volumeName) <= 30
 
 ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-DIRS_N = len(ALPHABET)**2
+DIRS = [f'{a}/{b}' for a in ALPHABET for b in ALPHABET]
 
 def dhash (i):
     # QUANTOS POR DIRETORIO
-    q = (len(reais) // DIRS_N) + ((len(reais) % DIRS_N) != 0)
-    i //= q
-    return '/'.join((        
-        ALPHABET[i // len(ALPHABET)],
-        ALPHABET[i %  len(ALPHABET)]
-    ))
-
-# TODO: REMDIR TODOS OS DIRETIORIOS PARE ELIMINAR OS VAZIOS
+    q = (len(reais) // len(DIRS)) + ((len(reais) % len(DIRS)) != 0)
+    return DIRS[i // q]
 
 def mhash ():
 
@@ -118,13 +112,25 @@ for a in ALPHABET:
 for i, (r, st, n) in enumerate(reais):
     os.symlink(r, f'{dhash(i)}/{n}')
 
+# TODO: REMDIR TODOS OS DIRETIORIOS PARE ELIMINAR OS VAZIOS
+for d in DIRS:
+    try:
+        os.rmdir(d)
+    except:
+        pass
+for a in ALPHABET:
+    try:
+        os.rmdir(a)
+    except:
+        pass
+
 #############################################################
 # CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
 
 # TODO: AQUELE PADDING QUE O MKISOFS FAZ
 PADDING = 128*2048
 
-osize = ((8*1024*1024 + DIRS_N*256 + (128 + len(m) + 2048) + sum((128 + st.st_size + 2048) for r, st, n in reais) + PADDING + 65536 - 1) // 65536) * 65536
+osize = ((8*1024*1024 + len(DIRS)*256 + (128 + len(m) + 2048) + sum((128 + st.st_size + 2048) for r, st, n in reais) + PADDING + 65536 - 1) // 65536) * 65536
 #osize = -print-size
 
 print('OSIZE:', osize)
@@ -190,13 +196,13 @@ for i, (real, st, new) in enumerate(reais):
         oview[end:end+1] = b'\x00'
         end += 1
 
-    ate = end + st.st_size
+    end_ = end + st.st_size
     # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
     with io.FileIO(real, 'r') as rfd:
         while c := rfd.readinto(oview[end:]):
             assert 1 <= c
             end += c
-    assert end == ate
+    assert end == end_
 
 # FLUSH ANY REMAINING, WITH PADDING, ALIGNED
 end = ((end + PADDING + 65536 - 1) // 65536) * 65536
