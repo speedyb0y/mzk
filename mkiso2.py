@@ -120,10 +120,8 @@ for i, (r, st, n) in enumerate(reais):
 # TODO: AQUELE PADDING QUE O MKISOFS FAZ
 PADDING = 128*2048
 
-osize = 512*1024 + DIRS_N*256 + (128 + len(m) + 2048) + sum((128 + st.st_size + 2048) for r, st, n in reais) + PADDING
+osize = ((512*1024 + DIRS_N*256 + (128 + len(m) + 2048) + sum((128 + st.st_size + 2048) for r, st, n in reais) + PADDING + 65536 - 1) // 65536) * 65536
 #osize = -print-size
-
-osize = ((osize + 65536 - 1) // 65536) * 65536
 
 print('OSIZE:', osize)
 
