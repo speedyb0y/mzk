@@ -176,9 +176,9 @@ pipe.close()
 #############################################################
 # PUT ALL THE FILES
 
-for real, st, new in reais:
+for i, (real, st, new) in enumerate(reais):
 
-    print(st.st_size, new, real)
+    print(st.st_size, f'{dhash(i)}/{new}', real)
 
     # CADA ARQUIVO COMECA EM UM BLOCO
     end_ = ((end + 2048 - 1) // 2048) * 2048
