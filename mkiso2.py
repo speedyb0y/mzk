@@ -53,12 +53,15 @@ assert 0 <= RANDOMFD <= 10
 
 reais = []
 
-for d in inputs:
+def directory (append, d):
     try:
         for f in os.listdir(d):
-            reais.append(f'{d}/{f}')
-    except TimeoutError:
-        reais.append(d)
+            directory(append, f'{d}/{f}')
+    except NotADirectoryError:
+        append(d)
+
+for d in inputs:
+    directory(reais.append, d)
 
 # REORDENA CONFORME O DISCO E A POSICAO NO DISCO
 def FIOMAP (f):
@@ -199,7 +202,7 @@ for i, (real, st, new) in enumerate(reais):
         oview[end:end+1] = b'\x00'
         end += 1
 
-    if size := st.st_size:        
+    if size := st.st_size:
         done += size
         # TODO: FIXME: READ WITH DIRECT_IO DIRECTLY FROM THE DISK
         with io.FileIO(real, 'r') as fd:

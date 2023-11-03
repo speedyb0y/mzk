@@ -1,5 +1,73 @@
 #!/usr/bin/python
 
+'''
+
+#for x in * ; do mv -vn "${x}" $(metaflac --show-md5sum "${x}") ; done
+
+# CONVERT
+function rehash () {
+    for x in "${@}" ; do
+        MD5=-
+        MD5=$(metaflac --show-md5sum ${x}) || continue
+        OHASH=-
+        OHASH=$(spipe $[1*1024*1024] /bin/ffmpeg ffmpeg -y -hide_banner -loglevel quiet -i ${x} -f s24le - | b3sum --num-threads 1 --no-names --raw | base64 | tr / @ | tr + \$) || continue
+        BR=-
+        BR=$(soxi -c ${x}):$(soxi -b ${x}):$(soxi -r ${x}) || continue
+        [ ${#MD5} = 32 ] || continue
+        [ ${#OHASH} = 44 ] || continue
+        [ ${OHASH:43:1} = = ] || continue
+        OHASH=${OHASH:0:43}
+        case ${BR} in
+            1:16:44100) BR=180 ;;
+            1:24:44100) BR=180 ;;
+            1:32:44100) BR=180 ;;
+            1:16:48000) BR=180 ;;
+            1:24:48000) BR=190 ;;
+            1:32:48000) BR=190 ;;
+            1:16:88200) BR=200 ;;
+            1:24:88200) BR=220 ;;
+            1:32:88200) BR=220 ;;
+            1:16:96000) BR=200 ;;
+            1:24:96000) BR=220 ;;
+            1:32:96000) BR=220 ;;
+            1:16:192000) BR=256 ;;
+            1:24:192000) BR=280 ;;
+            1:32:192000) BR=280 ;;
+            *) echo ${BR}
+                continue ;;
+        esac
+        if opusenc --quiet --music --discard-pictures --comp 10 --bitrate ${BR} --comment ORIGINAL_HASH=${OHASH} --comment ORIGINAL_FLAC_MD5=${MD5} -- ${x} opus-flac/${OHASH} ; then
+			rm -fv -- "${x}"
+        fi
+    done
+}
+
+rehash flac-md5/[a-c]*
+rehash flac-md5/[d-f]*
+rehash flac-md5/[0-4]*
+rehash flac-md5/[6-9]*
+
+# UNIFY FLAC AS ORIGINAL_HASH
+for x in * ; do
+    OHASH=-
+    if OHASH=$(spipe $[1*1024*1024] /bin/ffmpeg ffmpeg -y -hide_banner -loglevel quiet -i ${x} -f s24le - | b3sum --num-threads 1 --no-names --raw | base64 | tr / @ | tr + \$) ; then
+        if [ ${#OHASH} = 44 ] ; then
+            mv -vn -- ${x} /mnt/sda2/FLAC-OHASH/${OHASH}
+        fi
+    fi
+done
+
+# UNIFY LOSSY OPUS
+for x in todo/*.opus ; do
+    HASH=-
+    if HASH=$(opusdec --quiet ${x} - | b3sum --num-threads 1 --no-names --raw | base64 | tr / '@') ; then
+        if [ ${#HASH} = 44 ] ; then
+            mv -v -- ${x} hashed/${HASH}
+        fi
+    fi
+done
+'''
+
 import sys
 import os
 import io
@@ -10,6 +78,128 @@ import re
 import traceback
 import mmap
 import random
+import base64
+
+#
+_lossless_44k_16b = 180
+_lossless_44k_24b = 180
+_lossless_44k_32b = 180
+
+_lossless_48k_16b = 180
+_lossless_48k_24b = 190
+_lossless_48k_32b = 190
+
+_lossless_96k_16b = 200
+_lossless_96k_24b = 220
+_lossless_96k_32b = 220
+
+_lossless_192k_16b = 256
+_lossless_192k_24b = 280
+_lossless_192k_32b = 280
+
+_lossy_44k_16b = 150
+_lossy_44k_24b = 150
+_lossy_44k_32b = 150
+
+_lossy_48k_16b = 150
+_lossy_48k_24b = 150
+_lossy_48k_32b = 150
+
+mapa = {
+    # LOSSLESS 44100
+    ('FLAC',        1, 44100, 's16',  0,  16)   : _lossless_44k_16b,
+    ('FLAC',        1, 44100, 's32',  0,  24)   : _lossless_44k_24b,
+    ('FLAC',        1, 44100, 's32',  0,  32)   : _lossless_44k_32b,
+    ('ALAC',        1, 44100, 's16p', 0,  16)   : _lossless_44k_16b,
+    ('ALAC',        1, 44100, 's32p', 0,  24)   : _lossless_44k_24b,
+    ('ALAC',        1, 44100, 's32p', 0,  32)   : _lossless_44k_32b,
+    ('APE',         1, 44100, 's16p', 0,  16)   : _lossless_44k_16b,
+    ('APE',         1, 44100, 's32p', 0,  24)   : _lossless_44k_24b,
+    ('APE',         1, 44100, 's32p', 0,  32)   : _lossless_44k_32b,
+    ('PCM_S16BE',   1, 44100, 's16',  16, None) : _lossless_44k_16b,
+    ('PCM_S16LE',   1, 44100, 's16',  16, None) : _lossless_44k_16b,
+    ('PCM_S24BE',   1, 44100, 's32',  24, 24)   : _lossless_44k_24b,
+    ('PCM_S24LE',   1, 44100, 's32',  24, 24)   : _lossless_44k_24b,
+    ('PCM_S32BE',   1, 44100, 's32',  32, 32)   : _lossless_44k_32b,
+    ('PCM_S32LE',   1, 44100, 's32',  32, 32)   : _lossless_44k_32b,
+    ('PCM_F32LE',   1, 44100, 'flt',  32, None) : _lossless_44k_32b,
+    ('DTS',         1, 44100, 'fltp', 0,  None) : _lossless_44k_32b,
+    ('WAVPACK',     1, 44100, 's16p', 0,  16)   : _lossless_44k_16b,
+
+    # LOSSLESS 48000
+    ('FLAC',        1, 48000, 's16',  0,  16)   : _lossless_48k_16b,
+    ('FLAC',        1, 48000, 's32',  0,  24)   : _lossless_48k_24b,
+    ('FLAC',        1, 48000, 's32',  0,  32)   : _lossless_48k_32b,
+    ('ALAC',        1, 48000, 's16p', 0,  16)   : _lossless_48k_16b,
+    ('ALAC',        1, 48000, 's32p', 0,  24)   : _lossless_48k_24b,
+    ('ALAC',        1, 48000, 's32p', 0,  32)   : _lossless_48k_32b,
+    ('APE',         1, 48000, 's16p', 0,  16)   : _lossless_48k_16b,
+    ('APE',         1, 48000, 's32p', 0,  24)   : _lossless_48k_24b,
+    ('APE',         1, 48000, 's32p', 0,  32)   : _lossless_48k_32b,
+    ('PCM_S16BE',   1, 48000, 's16',  16, None) : _lossless_48k_16b,
+    ('PCM_S16LE',   1, 48000, 's16',  16, None) : _lossless_48k_16b,
+    ('PCM_S24BE',   1, 48000, 's32',  24, 24)   : _lossless_48k_24b,
+    ('PCM_S24LE',   1, 48000, 's32',  24, 24)   : _lossless_48k_24b,
+    ('PCM_S32BE',   1, 48000, 's32',  32, 32)   : _lossless_48k_32b,
+    ('PCM_S32LE',   1, 48000, 's32',  32, 32)   : _lossless_48k_32b,
+    ('PCM_F32LE',   1, 48000, 'flt',  32, None) : _lossless_48k_32b,
+    ('DTS',         1, 48000, 'fltp', 0,  None) : _lossless_48k_32b,
+    ('WAVPACK',     1, 48000, 's16p', 0,  16)   : _lossless_48k_16b,
+
+    # LOSSLESS 96000
+    ('FLAC',        1, 96000, 's16',  0,  16)   : _lossless_96k_16b,
+    ('FLAC',        1, 96000, 's32',  0,  24)   : _lossless_96k_24b,
+    ('FLAC',        1, 96000, 's32',  0,  32)   : _lossless_96k_32b,
+    ('ALAC',        1, 96000, 's16p', 0,  16)   : _lossless_96k_16b,
+    ('ALAC',        1, 96000, 's32p', 0,  24)   : _lossless_96k_24b,
+    ('ALAC',        1, 96000, 's32p', 0,  32)   : _lossless_96k_32b,
+    ('APE',         1, 96000, 's16p', 0,  16)   : _lossless_96k_16b,
+    ('APE',         1, 96000, 's32p', 0,  24)   : _lossless_96k_24b,
+    ('APE',         1, 96000, 's32p', 0,  32)   : _lossless_96k_32b,
+    ('PCM_S16BE',   1, 96000, 's16',  16, None) : _lossless_96k_16b,
+    ('PCM_S16LE',   1, 96000, 's16',  16, None) : _lossless_96k_16b,
+    ('PCM_S24BE',   1, 96000, 's32',  24, 24)   : _lossless_96k_24b,
+    ('PCM_S24LE',   1, 96000, 's32',  24, 24)   : _lossless_96k_24b,
+    ('PCM_S32BE',   1, 96000, 's32',  32, 32)   : _lossless_96k_32b,
+    ('PCM_S32LE',   1, 96000, 's32',  32, 32)   : _lossless_96k_32b,
+    ('PCM_F32LE',   1, 96000, 'flt',  32, None) : _lossless_96k_32b,
+    ('DTS',         1, 96000, 'fltp', 0,  None) : _lossless_96k_32b,
+    ('WAVPACK',     1, 96000, 's16p', 0,  16)   : _lossless_96k_16b,
+
+    # LOSSLESS 192000
+    ('FLAC',        1, 192000, 's16',  0,  16)   : _lossless_192k_16b,
+    ('FLAC',        1, 192000, 's32',  0,  24)   : _lossless_192k_24b,
+    ('FLAC',        1, 192000, 's32',  0,  32)   : _lossless_192k_32b,
+    ('ALAC',        1, 192000, 's16p', 0,  16)   : _lossless_192k_16b,
+    ('ALAC',        1, 192000, 's32p', 0,  24)   : _lossless_192k_24b,
+    ('ALAC',        1, 192000, 's32p', 0,  32)   : _lossless_192k_32b,
+    ('APE',         1, 192000, 's16p', 0,  16)   : _lossless_192k_16b,
+    ('APE',         1, 192000, 's32p', 0,  24)   : _lossless_192k_24b,
+    ('APE',         1, 192000, 's32p', 0,  32)   : _lossless_192k_32b,
+    ('PCM_S16BE',   1, 192000, 's16',  16, None) : _lossless_192k_16b,
+    ('PCM_S16LE',   1, 192000, 's16',  16, None) : _lossless_192k_16b,
+    ('PCM_S24BE',   1, 192000, 's32',  24, 24)   : _lossless_192k_24b,
+    ('PCM_S24LE',   1, 192000, 's32',  24, 24)   : _lossless_192k_24b,
+    ('PCM_S32BE',   1, 192000, 's32',  32, 32)   : _lossless_192k_32b,
+    ('PCM_S32LE',   1, 192000, 's32',  32, 32)   : _lossless_192k_32b,
+    ('PCM_F32LE',   1, 192000, 'flt',  32, None) : _lossless_192k_32b,
+    ('DTS',         1, 192000, 'fltp', 0,  None) : _lossless_192k_32b,
+    ('WAVPACK',     1, 192000, 's16p', 0,  16)   : _lossless_192k_16b,
+
+    # LOSSY 44100
+    ('WAVPACK',     1, 44100, 'fltp', 0,  32)   : _lossy_44k_24b,
+    ('WAVPACK',     1, 48000, 'fltp', 0,  32)   : _lossy_48k_24b,
+    ('MP3',         1, 44100, 'fltp', 0,  None) : _lossy_44k_24b,
+    ('MP3',         1, 48000, 'fltp', 0,  None) : _lossy_48k_24b,
+    ('AAC',         1, 44100, 'fltp', 0,  None) : _lossy_44k_24b,
+    ('VORBIS',      1, 44100, 'fltp', 0,  None) : _lossy_44k_24b,
+    ('VORBIS',      1, 48000, 'fltp', 0,  None) : _lossy_48k_24b,
+    ('WMAPRO',      1, 44100, 'fltp', 0,  None) : _lossy_44k_16b,
+    ('WMAV2',       1, 44100, 'fltp', 0,  None) : _lossy_44k_16b,
+    ('WMALOSSLESS', 1, 44100, 's16p', 0,  None) : _lossy_44k_24b,
+
+    #('OPUS',      'fltp', 0,  None) : ('opus', 24), # CAUTION
+}
 
 #export LC_ALL=en_US.UTF-8
 
@@ -59,6 +249,17 @@ assert version('opusdec  --version', 'opusdec')
 assert version('flac     --version', 'flac')
 assert version('metaflac --version', 'metaflac')
 assert version('soxi',               'soxi')
+
+def scandir (d):
+    try:
+        for f in os.listdir(d):
+            yield from scandir(f'{d}/{f}')
+    except FileNotFoundError:
+        pass
+    except PermissionError:
+        pass
+    except NotADirectoryError:
+        yield d
 
 ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
@@ -141,9 +342,9 @@ if tid == CPUS:
 
     try:
         for f in sys.argv[1:]:
-            for f in os.popen(f"find '{f}' -type f -print0").read(8*1024*1024).encode().split(b'\x00'):
-                if re.match(b'^.*[.](mp3|aac|flac|wav|mp4|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
-                    os.write(pipeOut, f)
+            for f in scandir(f):
+                if re.match('^.*[.](mp3|aac|flac|wav|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
+                    os.write(pipeOut, f.encode())
     except KeyboardInterrupt:
         pass
 
@@ -350,36 +551,25 @@ try: # THREAD
             ) if re.match(r'^((|ALBUM_)(ARTIST|PERFORMER|TITLE|ALBUM)(|S)(|SORT|_SORT)|TIT[1-9]|YEAR|DATE|YOUTUBE|TRACKNUMBER|TRACKTOTAL|DISCNUMBER|ENCODER|MCDI|TALB|TOAL|TOFN|TOPE|TPE[0-9]|TRCK|REMIXED.BY|REMIXE[DR]|ORIGINALTITLE|DESCRIPTION|COMMENT)$', k)
         }
 
+        isBinaural = any('BINAURAL' in v.upper() for v in (original, *tags.values()))
+
+        if isBinaural:
+            print(f'[{tid}] {original}: SKIPPED: BINAURAL')
+            continue
+
+        # CHANNELS
+        if not (1 <= ORIGINAL_CHANNELS <= 2):
+            print(f'[{tid}] {original}: SKIPPED: BAD CHANNELS')
+            continue
+
+        #
+        channels = 1 + isBinaural
+
         #
         try:
-            fmt, bits = {
-                ('FLAC',      's16',  0,  16)   : ('flac', 16),
-                ('FLAC',      's32',  0,  24)   : ('flac', 24),
-                ('FLAC',      's32',  0,  32)   : ('flac', 32),
-                ('ALAC',      's16p', 0,  16)   : ('flac', 16),
-                ('ALAC',      's32p', 0,  24)   : ('flac', 24),
-                ('ALAC',      's32p', 0,  32)   : ('flac', 32),
-                ('APE',       's16p', 0,  16)   : ('flac', 16),
-                ('APE',       's32p', 0,  24)   : ('flac', 24),
-                ('APE',       's32p', 0,  32)   : ('flac', 32),
-                ('PCM_S16BE', 's16',  16, None) : ('flac', 16),
-                ('PCM_S16LE', 's16',  16, None) : ('flac', 16),
-                ('PCM_S24BE', 's32',  24, 24)   : ('flac', 24),
-                ('PCM_S24LE', 's32',  24, 24)   : ('flac', 24),
-                ('PCM_S32LE', 's32',  32, 32)   : ('flac', 32),
-                ('PCM_S32BE', 's32',  32, 32)   : ('flac', 32),
-                ('PCM_F32LE', 'flt',  32, None) : ('flac', 32),
-                ('DTS',       'fltp', 0,  None) : ('opus', 24),
-                ('WAVPACK',   's16p', 0,  16)   : ('opus', 24),
-                ('WAVPACK',   'fltp', 0,  32)   : ('opus', 24),
-                ('MP3',       'fltp', 0,  None) : ('opus', 24),
-                ('AAC',       'fltp', 0,  None) : ('opus', 24),
-                ('VORBIS',    'fltp', 0,  None) : ('opus', 24),
-                ('WMAPRO',    'fltp', 0,  None) : ('opus', 24),
-                ('OPUS',      'fltp', 0,  None) : ('opus', 24), # CAUTION
-                ('WMAV2',     'fltp', 0,  None) : ('opus', 24),
-                ('WMALOSSLESS', 's16p', 0, None) : ('opus', 24),
-            } [(ORIGINAL_CODEC_NAME,
+            br = mapa[(
+                ORIGINAL_CODEC_NAME, channels,
+                ORIGINAL_SAMPLE_RATE,
                 ORIGINAL_SAMPLE_FMT,
                 ORIGINAL_BITS,
                 ORIGINAL_BITS_RAW)]
@@ -387,77 +577,36 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: EITAAAAAAA!!!', repr(e))
             continue
 
-        if 'BINAURAL' in original.upper():
-            print(f'[{tid}] {original}: SKIPPED: BINAURAL ~~~~~~~ ~ ~ ~~  ')
-            continue
-        if any('BINAURAL' in v.upper() for v in tags.values()):
-            print(f'[{tid}] {original}: SKIPPED: BINAURAL')
-            continue
+        #
+        assert 96 <= br <= 320
 
-        # CHANNELS
-        if ORIGINAL_CHANNELS == 2:
-            if False:
-                # TODO: NO CASO DE BINAURAL, NAO COLOCAR EM MONO
-                channels = 2
-            else:
-                channels = 1
-        else:
-            channels = ORIGINAL_CHANNELS
+        #
+        assert channels == 1 # TODO:
 
         # DECODE
         # error vs quiet?
-        if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', f's{bits}le', decoded)):
+        if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', 's24le', decoded)):
             print(f'[{tid}] {original}: ERROR: DECODE FAILED.')
             continue
 
         # ENCODE
-        if fmt == 'opus': # OPUS
-            cmd, args, argsTag = '/usr/bin/opusenc', [ 'opusenc', decoded, encoded,
-                '--quiet',
-                '--music',
-                '--comp', '10',
-                '--bitrate', '150',
-                '--raw',
-                '--raw-endianness', '0',
-                '--raw-bits', str(bits),
-                '--raw-chan', str(channels),
-                '--raw-rate', str(ORIGINAL_SAMPLE_RATE),
-            ], '--comment'
-        else: # FLAC
-            cmd, args, argsTag = '/usr/bin/flac', [ 'flac', decoded, '-o', encoded,
-                #-A kaiser_bessel
-                #-A bartlett_hann
-                #-A hamming
-                #-A hann
-                #-A nuttall
-                #-A rectangle
-                #-A triangle
-                #-A bartlett
-                #-A blackman
-                #-A blackman_harris_4term_92db
-                #-A connes
-                #-A flattop
-                #-A gauss
-                #-A subdivide_tukey
-                #--exhaustive-model-search
-                #--qlp-coeff-precision-search
-                #--max-lpc-order=14
-                #-l 16
-                #--lax -b 16384 -l 32 -r 15
-                '--force-raw-format',
-                '--sign=signed',
-                '--endian=little',
-                f'--bps={bits}',
-                f'--channels={channels}',
-                f'--sample-rate={ORIGINAL_SAMPLE_RATE}',
-                '--silent',
-                '--best',
-                '--no-padding',
-                '--lax',
-                '-b', '16384',
-                '-l', '32',
-                '-r', '15'
-            ], '-T'
+        args = [ 'opusenc', decoded, encoded,
+            '--quiet',
+            '--music',
+            '--comp', '10',
+            '--bitrate', str(br),
+            '--raw',
+            '--raw-endianness', '0',
+            '--raw-bits', '24',
+            '--raw-chan', str(channels),
+            '--raw-rate', str(ORIGINAL_SAMPLE_RATE),
+        ]
+
+        #
+        with os.popen(f'b3sum --num-threads 1 --no-names --raw {decoded}') as bfd:
+            b3sum = base64.b64encode(os.read(bfd.fileno(), 1024)).replace(b'/', b'@').replace(b'+', b'$').decode()
+            assert len(b3sum) == 44 and b3sum.endswith('='), b3sum
+            args.extend(('--comment', f'ORIGINAL_HASH={b3sum[:43]}')) # TODO: É O ORIGINAL, EM SEU RAW, DECODED COM OS BITS *ESCOLHIDOS*
 
         # GENERATED TAGS
         for name in (
@@ -482,14 +631,14 @@ try: # THREAD
         ):
             val = eval(name)
             if val is not None:
-                args.extend((argsTag, f'{name}={val}'))
+                args.extend(('--comment', f'{name}={val}'))
 
         # ORIGINAL TAGS
         for name, val in tags.items():
-            args.extend((argsTag, f'{name}={val}'))
+            args.extend(('--comment', f'{name}={val}'))
 
         # EXECUTE THE ENCODER
-        if execute(cmd, args):
+        if execute('/usr/bin/opusenc', args):
             print(f'[{tid}] {original}: ERROR: ENCODE FAILED.')
             continue
 
@@ -497,17 +646,10 @@ try: # THREAD
         os.unlink(decoded)
 
         # VERIFY
-        if fmt == 'flac':
-            # FLAC
-            assert channels             == int(piped(f'metaflac --show-channels    {encoded}'))
-            assert bits                 == int(piped(f'metaflac --show-bps         {encoded}'))
-            assert ORIGINAL_SAMPLE_RATE == int(piped(f'metaflac --show-sample-rate {encoded}'))
-        else:
-            # OPUS
-            assert channels == int(piped(f'soxi -c {encoded}'))
-            assert 0        == int(piped(f'soxi -b {encoded}'))
-            assert 16       == int(piped(f'soxi -p {encoded}'))
-            assert 48000    == int(piped(f'soxi -r {encoded}'))
+        assert channels == int(piped(f'soxi -c {encoded}'))
+        assert 0        == int(piped(f'soxi -b {encoded}'))
+        assert 16       == int(piped(f'soxi -p {encoded}'))
+        assert 48000    == int(piped(f'soxi -r {encoded}'))
 
         #
         where, tmp = good
@@ -519,7 +661,7 @@ try: # THREAD
             where, tmp = bad
 
         # NOW COPY FROM TEMP
-        new = f'{where}/{mhash(12)}.{fmt}'
+        new = f'{where}/{mhash(12)}.opus'
 
         #
         o = os.open(tmp, os.O_WRONLY | os.O_DIRECT | os.O_CREAT | os.O_EXCL, 0o644)

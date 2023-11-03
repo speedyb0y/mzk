@@ -23,6 +23,9 @@ find /mnt/sda2/DOWNLOAD -type f \( \
     -iname '*.md5' -o \
     -iname '*.ffp' -o \
     -iname '*.exe' -o \
+    -iname '*.ini' -o \
+    -iname '*.srt' -o \
+    -iname '*.lrc' -o \
     -iname '*.sfv' -o \
     -iname '*.nfo' -o \
     -iname '*.nfofile' -o \
