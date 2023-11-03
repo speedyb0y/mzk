@@ -4,49 +4,6 @@
 
 #for x in * ; do mv -vn "${x}" $(metaflac --show-md5sum "${x}") ; done
 
-# CONVERT
-function rehash () {
-    for x in "${@}" ; do
-        MD5=-
-        MD5=$(metaflac --show-md5sum ${x}) || continue
-        OHASH=-
-        OHASH=$(spipe $[1*1024*1024] /bin/ffmpeg ffmpeg -y -hide_banner -loglevel quiet -i ${x} -f s24le - | b3sum --num-threads 1 --no-names --raw | base64 | tr / @ | tr + \$) || continue
-        BR=-
-        BR=$(soxi -c ${x}):$(soxi -b ${x}):$(soxi -r ${x}) || continue
-        [ ${#MD5} = 32 ] || continue
-        [ ${#OHASH} = 44 ] || continue
-        [ ${OHASH:43:1} = = ] || continue
-        OHASH=${OHASH:0:43}
-        case ${BR} in
-            1:16:44100) BR=180 ;;
-            1:24:44100) BR=180 ;;
-            1:32:44100) BR=180 ;;
-            1:16:48000) BR=180 ;;
-            1:24:48000) BR=190 ;;
-            1:32:48000) BR=190 ;;
-            1:16:88200) BR=200 ;;
-            1:24:88200) BR=220 ;;
-            1:32:88200) BR=220 ;;
-            1:16:96000) BR=200 ;;
-            1:24:96000) BR=220 ;;
-            1:32:96000) BR=220 ;;
-            1:16:192000) BR=256 ;;
-            1:24:192000) BR=280 ;;
-            1:32:192000) BR=280 ;;
-            *) echo ${BR}
-                continue ;;
-        esac
-        if opusenc --quiet --music --discard-pictures --comp 10 --bitrate ${BR} --comment ORIGINAL_HASH=${OHASH} --comment ORIGINAL_FLAC_MD5=${MD5} -- ${x} opus-flac/${OHASH} ; then
-			rm -fv -- "${x}"
-        fi
-    done
-}
-
-rehash flac-md5/[a-c]*
-rehash flac-md5/[d-f]*
-rehash flac-md5/[0-4]*
-rehash flac-md5/[6-9]*
-
 # UNIFY FLAC AS ORIGINAL_HASH
 for x in * ; do
     OHASH=-
@@ -78,32 +35,31 @@ import re
 import traceback
 import mmap
 import random
-import base64
 
 #
 _lossless_44k_16b = 180
 _lossless_44k_24b = 180
 _lossless_44k_32b = 180
 
-_lossless_48k_16b = 180
-_lossless_48k_24b = 190
-_lossless_48k_32b = 190
+_lossless_48k_16b = 190
+_lossless_48k_24b = 200
+_lossless_48k_32b = 200
 
-_lossless_96k_16b = 200
-_lossless_96k_24b = 220
-_lossless_96k_32b = 220
+_lossless_96k_16b = 256
+_lossless_96k_24b = 280
+_lossless_96k_32b = 280
 
-_lossless_192k_16b = 256
-_lossless_192k_24b = 280
-_lossless_192k_32b = 280
+_lossless_192k_16b = 280
+_lossless_192k_24b = 300
+_lossless_192k_32b = 300
 
 _lossy_44k_16b = 150
-_lossy_44k_24b = 150
-_lossy_44k_32b = 150
+_lossy_44k_24b = 160
+_lossy_44k_32b = 160
 
-_lossy_48k_16b = 150
-_lossy_48k_24b = 150
-_lossy_48k_32b = 150
+_lossy_48k_16b = 160
+_lossy_48k_24b = 178
+_lossy_48k_32b = 178
 
 mapa = {
     # LOSSLESS 44100
@@ -199,6 +155,7 @@ mapa = {
     ('WMALOSSLESS', 1, 44100, 's16p', 0,  None) : _lossy_44k_24b,
 
     #('OPUS',      'fltp', 0,  None) : ('opus', 24), # CAUTION
+    ('OPUS',        1, 48000, 'fltp', 0,  None) : _lossy_48k_32b,
 }
 
 #export LC_ALL=en_US.UTF-8
@@ -418,8 +375,6 @@ try: # THREAD
                 os.unlink(original)
             continue
 
-        CONVERSION_TIME = int(time.time())
-
         #
         try:
             with open(original, 'rb') as xxx:
@@ -442,21 +397,17 @@ try: # THREAD
                 # STREAM
                 ORIGINAL_CODEC_NAME,
                 ORIGINAL_CODEC_LONG_NAME,
-                ORIGINAL_CODEC_TAG_STRING,
-                ORIGINAL_CODEC_TAG,
                 ORIGINAL_SAMPLE_FMT,
                 ORIGINAL_SAMPLE_RATE,
                 ORIGINAL_CHANNELS,
                 ORIGINAL_CHANNEL_LAYOUT,
                 ORIGINAL_BITS,
                 ORIGINAL_BITS_RAW,
-                ORIGINAL_DURATION_TS,
                 ORIGINAL_DURATION,
                 ORIGINAL_BITRATE,
-                ORIGINAL_TIME_BASE,
                 ORIGINAL_TAGS2
 
-            ) = ( (d[k] if k in d else None)
+            ) = ( (d[k] if k in d and d[k] != '' else None)
                 for d, K in (
                     ( fpFormat, (
                         'format_name',
@@ -466,18 +417,14 @@ try: # THREAD
                     ( fpStream, (
                         'codec_name',
                         'codec_long_name',
-                        'codec_tag_string',
-                        'codec_tag',
                         'sample_fmt',
                         'sample_rate',
                         'channels',
                         'channel_layout',
                         'bits_per_sample',
                         'bits_per_raw_sample',
-                        'duration_ts',
                         'duration',
                         'bit_rate',
-                        'time_base',
                         'tags',
                     )),
                 )
@@ -494,7 +441,43 @@ try: # THREAD
             continue
 
         #
-        ORIGINAL_FILEPATH         = original
+        tags = { k: ' '.join(v.split()).upper()
+            for k, v in ( ('_'.join(k_.replace('_', ' ').replace('-', ' ').split()).upper(), v_)
+                for T in (ORIGINAL_TAGS, ORIGINAL_TAGS2)
+                    if T is not None
+                        for k_, v_ in T.items()
+                            if k_ and v_ is not None
+            )
+        }
+
+        #
+        if 'CONVERSION_TIME' in tags:
+            # TODAS MENOS ESTAS
+            tags.pop('ORIGINAL_CODEC_TAG_STRING', None)
+            tags.pop('ORIGINAL_CODEC_TAG',        None)
+            tags.pop('ORIGINAL_TIME_BASE',        None)
+            tags.pop('ORIGINAL_DURATION_TS',      None)
+        else:
+            # SOMENTE ESTAS
+            tags = { k: v[:1024] for k, v in tags.items() if re.match(r'^((|ALBUM_)(ARTIST|PERFORMER|TITLE|ALBUM)(|S)(|SORT|_SORT)|TIT[1-9]|YEAR|DATE|YOUTUBE|TRACKNUMBER|TRACKTOTAL|DISCNUMBER|ENCODER|MCDI|TALB|TOAL|TOFN|TOPE|TPE[0-9]|TRCK|REMIXED.BY|REMIXE[DR]|ORIGINALTITLE|DESCRIPTION|COMMENT)$', k) }
+
+        CONVERSION_TIME           = tags.pop('CONVERSION_TIME',         int(time.time()))
+        ORIGINAL_HASH             = tags.pop('ORIGINAL_HASH',                   None)
+        ORIGINAL_FILEPATH         = tags.pop('ORIGINAL_FILEPATH',        tags.pop('ORIGINAL_FILENAME', tags.pop('ORIGINAL_PATH', original)))
+        ORIGINAL_BITS             = tags.pop('ORIGINAL_BITS',             ORIGINAL_BITS)
+        ORIGINAL_BITS_RAW         = tags.pop('ORIGINAL_BITS_RAW',         ORIGINAL_BITS_RAW)
+        ORIGINAL_BITRATE          = tags.pop('ORIGINAL_BITRATE',          ORIGINAL_BITRATE)
+        ORIGINAL_CHANNELS         = tags.pop('ORIGINAL_CHANNELS',         ORIGINAL_CHANNELS)
+        ORIGINAL_CHANNEL_LAYOUT   = tags.pop('ORIGINAL_CHANNEL_LAYOUT',   ORIGINAL_CHANNEL_LAYOUT)
+        ORIGINAL_SAMPLE_FMT       = tags.pop('ORIGINAL_SAMPLE_FMT',       ORIGINAL_SAMPLE_FMT)
+        ORIGINAL_SAMPLE_RATE      = tags.pop('ORIGINAL_SAMPLE_RATE',      ORIGINAL_SAMPLE_RATE)
+        ORIGINAL_FORMAT_NAME      = tags.pop('ORIGINAL_FORMAT_NAME',      ORIGINAL_FORMAT_NAME)
+        ORIGINAL_FORMAT_NAME_LONG = tags.pop('ORIGINAL_FORMAT_NAME_LONG', ORIGINAL_FORMAT_NAME_LONG)
+        ORIGINAL_CODEC_NAME       = tags.pop('ORIGINAL_CODEC_NAME',       ORIGINAL_CODEC_NAME)
+        ORIGINAL_CODEC_LONG_NAME  = tags.pop('ORIGINAL_CODEC_LONG_NAME',  ORIGINAL_CODEC_LONG_NAME)
+        ORIGINAL_DURATION         = tags.pop('ORIGINAL_DURATION',         ORIGINAL_DURATION)
+
+        #
         ORIGINAL_FORMAT_NAME      = str.upper (ORIGINAL_FORMAT_NAME)
         ORIGINAL_FORMAT_NAME_LONG = str.upper (ORIGINAL_FORMAT_NAME_LONG)
         ORIGINAL_CODEC_NAME       = str.upper (ORIGINAL_CODEC_NAME)
@@ -502,7 +485,6 @@ try: # THREAD
         ORIGINAL_CHANNELS         = int       (ORIGINAL_CHANNELS)
         ORIGINAL_SAMPLE_RATE      = int       (ORIGINAL_SAMPLE_RATE)
         ORIGINAL_DURATION         = float     (ORIGINAL_DURATION)
-        ORIGINAL_DURATION_TS      = int       (ORIGINAL_DURATION_TS)
 
         if ORIGINAL_BITS     is not None: ORIGINAL_BITS     = int(ORIGINAL_BITS)
         if ORIGINAL_BITS_RAW is not None: ORIGINAL_BITS_RAW = int(ORIGINAL_BITS_RAW)
@@ -515,21 +497,41 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: BAD BITS RAW: {ORIGINAL_BITS_RAW}')
             continue
 
-        if not (1 <= ORIGINAL_CHANNELS <= 16):
+        if not (1 <= ORIGINAL_CHANNELS <= 2):
             print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {ORIGINAL_CHANNELS}')
             continue
 
-        if ORIGINAL_DURATION < 15:
-            print(f'[{tid}] {original}: ERROR: BAD DURATION: {ORIGINAL_DURATION}')
-            os.unlink(original)
-            continue
-
         if not (20 <= ORIGINAL_DURATION <= 7*24*60*60):
+            if ORIGINAL_DURATION < 15:
+                os.unlink(original)
             print(f'[{tid}] {original}: ERROR: BAD DURATION: {ORIGINAL_DURATION}')
             continue
 
-        if not (1 <= ORIGINAL_DURATION_TS):
-            print(f'[{tid}] {original}: ERROR: BAD DURATION TS: {ORIGINAL_DURATION_TS}')
+        #
+        isBinaural = any('BINAURAL' in v.upper() for v in (original, *tags.values()))
+
+        if isBinaural:
+            print(f'[{tid}] {original}: SKIPPED: BINAURAL')
+            continue
+
+        #
+        channels = 1 + isBinaural
+
+        # TODO:
+        assert channels == 1
+
+        #
+        try:
+            br = mapa[(
+                ORIGINAL_CODEC_NAME, channels,
+                ORIGINAL_SAMPLE_RATE,
+                ORIGINAL_SAMPLE_FMT,
+                ORIGINAL_BITS,
+                ORIGINAL_BITS_RAW,
+            )]
+            assert 96 <= br <= 320
+        except KeyError as e:
+            print(f'[{tid}] {original}: ERROR: EITAAAAAAA!!!', repr(e))
             continue
 
         #
@@ -539,55 +541,17 @@ try: # THREAD
             except FileNotFoundError:
                 pass
 
-        # TODO: verificar RELACAO ENTRE sample_fmt e ORIGINAL_BITS
-
-        # COPY ONLY THOSE TAGS
-        tags = { k: ' '.join(v.split()).upper()
-            for k, v in ( ('_'.join(k_.replace('_', ' ').replace('-', ' ').split()).upper(), v_)
-                for T in (ORIGINAL_TAGS, ORIGINAL_TAGS2)
-                    if T is not None
-                        for k_, v_ in T.items()
-                            if k_ and v_ is not None
-            ) if re.match(r'^((|ALBUM_)(ARTIST|PERFORMER|TITLE|ALBUM)(|S)(|SORT|_SORT)|TIT[1-9]|YEAR|DATE|YOUTUBE|TRACKNUMBER|TRACKTOTAL|DISCNUMBER|ENCODER|MCDI|TALB|TOAL|TOFN|TOPE|TPE[0-9]|TRCK|REMIXED.BY|REMIXE[DR]|ORIGINALTITLE|DESCRIPTION|COMMENT)$', k)
-        }
-
-        isBinaural = any('BINAURAL' in v.upper() for v in (original, *tags.values()))
-
-        if isBinaural:
-            print(f'[{tid}] {original}: SKIPPED: BINAURAL')
-            continue
-
-        # CHANNELS
-        if not (1 <= ORIGINAL_CHANNELS <= 2):
-            print(f'[{tid}] {original}: SKIPPED: BAD CHANNELS')
-            continue
-
-        #
-        channels = 1 + isBinaural
-
-        #
-        try:
-            br = mapa[(
-                ORIGINAL_CODEC_NAME, channels,
-                ORIGINAL_SAMPLE_RATE,
-                ORIGINAL_SAMPLE_FMT,
-                ORIGINAL_BITS,
-                ORIGINAL_BITS_RAW)]
-        except KeyError as e:
-            print(f'[{tid}] {original}: ERROR: EITAAAAAAA!!!', repr(e))
-            continue
-
-        #
-        assert 96 <= br <= 320
-
-        #
-        assert channels == 1 # TODO:
-
-        # DECODE
-        # error vs quiet?
+        # DECODE FIXME: error vs quiet?
         if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', 's24le', decoded)):
             print(f'[{tid}] {original}: ERROR: DECODE FAILED.')
             continue
+
+        #
+        if ORIGINAL_HASH is None:
+            with os.popen(f'b3sum --num-threads 1 --no-names --raw {decoded} | base64') as bfd:
+                b3sum = bfd.read(1024)
+            assert len(b3sum) == 45 and b3sum.endswith('=\n')
+            ORIGINAL_HASH = b3sum.replace('/', '@').replace('+', '$').rstrip('\n').rstrip('=')
 
         # ENCODE
         args = [ 'opusenc', decoded, encoded,
@@ -599,35 +563,26 @@ try: # THREAD
             '--raw-endianness', '0',
             '--raw-bits', '24',
             '--raw-chan', str(channels),
-            '--raw-rate', str(ORIGINAL_SAMPLE_RATE),
+            '--raw-rate', str(fpStream['sample_rate']),
         ]
-
-        #
-        with os.popen(f'b3sum --num-threads 1 --no-names --raw {decoded}') as bfd:
-            b3sum = base64.b64encode(os.read(bfd.fileno(), 1024)).replace(b'/', b'@').replace(b'+', b'$').decode()
-            assert len(b3sum) == 44 and b3sum.endswith('='), b3sum
-            args.extend(('--comment', f'ORIGINAL_HASH={b3sum[:43]}')) # TODO: É O ORIGINAL, EM SEU RAW, DECODED COM OS BITS *ESCOLHIDOS*
 
         # GENERATED TAGS
         for name in (
+            'CONVERSION_TIME',
+            'ORIGINAL_HASH',
             'ORIGINAL_FILEPATH',
+            'ORIGINAL_BITS',
+            'ORIGINAL_BITS_RAW',
+            'ORIGINAL_BITRATE',
+            'ORIGINAL_CHANNELS',
+            'ORIGINAL_CHANNEL_LAYOUT',
+            'ORIGINAL_SAMPLE_FMT',
+            'ORIGINAL_SAMPLE_RATE',
             'ORIGINAL_FORMAT_NAME',
             'ORIGINAL_FORMAT_NAME_LONG',
             'ORIGINAL_CODEC_NAME',
             'ORIGINAL_CODEC_LONG_NAME',
-            'ORIGINAL_CODEC_TAG_STRING',
-            'ORIGINAL_CODEC_TAG',
-            'ORIGINAL_SAMPLE_FMT',
-            'ORIGINAL_SAMPLE_RATE',
-            'ORIGINAL_CHANNELS',
-            'ORIGINAL_CHANNEL_LAYOUT',
-            'ORIGINAL_BITS',
-            'ORIGINAL_BITS_RAW',
-            'ORIGINAL_TIME_BASE',
-            'ORIGINAL_DURATION_TS',
             'ORIGINAL_DURATION',
-            'ORIGINAL_BITRATE',
-            'CONVERSION_TIME',
         ):
             val = eval(name)
             if val is not None:
@@ -661,7 +616,7 @@ try: # THREAD
             where, tmp = bad
 
         # NOW COPY FROM TEMP
-        new = f'{where}/{mhash(12)}.opus'
+        new = f'{where}/{mhash(12)}'
 
         #
         o = os.open(tmp, os.O_WRONLY | os.O_DIRECT | os.O_CREAT | os.O_EXCL, 0o644)
