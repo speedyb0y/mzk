@@ -36,22 +36,28 @@ import traceback
 import mmap
 import random
 
-#
-_lossless_44k_16b = 180
-_lossless_44k_24b = 180
-_lossless_44k_32b = 180
+_lossless = {
 
-_lossless_48k_16b = 190
-_lossless_48k_24b = 200
-_lossless_48k_32b = 200
+    (16, 44100): 160,
+    (24, 44100): 180,
+    (32, 44100): 185,
 
-_lossless_96k_16b = 256
-_lossless_96k_24b = 280
-_lossless_96k_32b = 280
+    (16, 48000): 170,
+    (24, 48000): 190,
+    (32, 48000): 210,
 
-_lossless_192k_16b = 280
-_lossless_192k_24b = 300
-_lossless_192k_32b = 300
+    (16, 96000): 256,
+    (24, 96000): 280,
+    (32, 96000): 395,
+
+    (16, 176400): 275,
+    (24, 176400): 295,
+    (32, 176400): 308,
+
+    (16, 192000): 290,
+    (24, 192000): 320,
+    (32, 192000): 330,
+}
 
 _lossy_44k_16b = 150
 _lossy_44k_24b = 160
@@ -62,100 +68,112 @@ _lossy_48k_24b = 178
 _lossy_48k_32b = 178
 
 mapa = {
-    # LOSSLESS 44100
-    ('FLAC',        1, 44100, 's16',  0,  16)   : _lossless_44k_16b,
-    ('FLAC',        1, 44100, 's32',  0,  24)   : _lossless_44k_24b,
-    ('FLAC',        1, 44100, 's32',  0,  32)   : _lossless_44k_32b,
-    ('ALAC',        1, 44100, 's16p', 0,  16)   : _lossless_44k_16b,
-    ('ALAC',        1, 44100, 's32p', 0,  24)   : _lossless_44k_24b,
-    ('ALAC',        1, 44100, 's32p', 0,  32)   : _lossless_44k_32b,
-    ('APE',         1, 44100, 's16p', 0,  16)   : _lossless_44k_16b,
-    ('APE',         1, 44100, 's32p', 0,  24)   : _lossless_44k_24b,
-    ('APE',         1, 44100, 's32p', 0,  32)   : _lossless_44k_32b,
-    ('PCM_S16BE',   1, 44100, 's16',  16, None) : _lossless_44k_16b,
-    ('PCM_S16LE',   1, 44100, 's16',  16, None) : _lossless_44k_16b,
-    ('PCM_S24BE',   1, 44100, 's32',  24, 24)   : _lossless_44k_24b,
-    ('PCM_S24LE',   1, 44100, 's32',  24, 24)   : _lossless_44k_24b,
-    ('PCM_S32BE',   1, 44100, 's32',  32, 32)   : _lossless_44k_32b,
-    ('PCM_S32LE',   1, 44100, 's32',  32, 32)   : _lossless_44k_32b,
-    ('PCM_F32LE',   1, 44100, 'flt',  32, None) : _lossless_44k_32b,
-    ('DTS',         1, 44100, 'fltp', 0,  None) : _lossless_44k_32b,
-    ('WAVPACK',     1, 44100, 's16p', 0,  16)   : _lossless_44k_16b,
 
-    # LOSSLESS 48000
-    ('FLAC',        1, 48000, 's16',  0,  16)   : _lossless_48k_16b,
-    ('FLAC',        1, 48000, 's32',  0,  24)   : _lossless_48k_24b,
-    ('FLAC',        1, 48000, 's32',  0,  32)   : _lossless_48k_32b,
-    ('ALAC',        1, 48000, 's16p', 0,  16)   : _lossless_48k_16b,
-    ('ALAC',        1, 48000, 's32p', 0,  24)   : _lossless_48k_24b,
-    ('ALAC',        1, 48000, 's32p', 0,  32)   : _lossless_48k_32b,
-    ('APE',         1, 48000, 's16p', 0,  16)   : _lossless_48k_16b,
-    ('APE',         1, 48000, 's32p', 0,  24)   : _lossless_48k_24b,
-    ('APE',         1, 48000, 's32p', 0,  32)   : _lossless_48k_32b,
-    ('PCM_S16BE',   1, 48000, 's16',  16, None) : _lossless_48k_16b,
-    ('PCM_S16LE',   1, 48000, 's16',  16, None) : _lossless_48k_16b,
-    ('PCM_S24BE',   1, 48000, 's32',  24, 24)   : _lossless_48k_24b,
-    ('PCM_S24LE',   1, 48000, 's32',  24, 24)   : _lossless_48k_24b,
-    ('PCM_S32BE',   1, 48000, 's32',  32, 32)   : _lossless_48k_32b,
-    ('PCM_S32LE',   1, 48000, 's32',  32, 32)   : _lossless_48k_32b,
-    ('PCM_F32LE',   1, 48000, 'flt',  32, None) : _lossless_48k_32b,
-    ('DTS',         1, 48000, 'fltp', 0,  None) : _lossless_48k_32b,
-    ('WAVPACK',     1, 48000, 's16p', 0,  16)   : _lossless_48k_16b,
-
-    # LOSSLESS 96000
-    ('FLAC',        1, 96000, 's16',  0,  16)   : _lossless_96k_16b,
-    ('FLAC',        1, 96000, 's32',  0,  24)   : _lossless_96k_24b,
-    ('FLAC',        1, 96000, 's32',  0,  32)   : _lossless_96k_32b,
-    ('ALAC',        1, 96000, 's16p', 0,  16)   : _lossless_96k_16b,
-    ('ALAC',        1, 96000, 's32p', 0,  24)   : _lossless_96k_24b,
-    ('ALAC',        1, 96000, 's32p', 0,  32)   : _lossless_96k_32b,
-    ('APE',         1, 96000, 's16p', 0,  16)   : _lossless_96k_16b,
-    ('APE',         1, 96000, 's32p', 0,  24)   : _lossless_96k_24b,
-    ('APE',         1, 96000, 's32p', 0,  32)   : _lossless_96k_32b,
-    ('PCM_S16BE',   1, 96000, 's16',  16, None) : _lossless_96k_16b,
-    ('PCM_S16LE',   1, 96000, 's16',  16, None) : _lossless_96k_16b,
-    ('PCM_S24BE',   1, 96000, 's32',  24, 24)   : _lossless_96k_24b,
-    ('PCM_S24LE',   1, 96000, 's32',  24, 24)   : _lossless_96k_24b,
-    ('PCM_S32BE',   1, 96000, 's32',  32, 32)   : _lossless_96k_32b,
-    ('PCM_S32LE',   1, 96000, 's32',  32, 32)   : _lossless_96k_32b,
-    ('PCM_F32LE',   1, 96000, 'flt',  32, None) : _lossless_96k_32b,
-    ('DTS',         1, 96000, 'fltp', 0,  None) : _lossless_96k_32b,
-    ('WAVPACK',     1, 96000, 's16p', 0,  16)   : _lossless_96k_16b,
-
-    # LOSSLESS 192000
-    ('FLAC',        1, 192000, 's16',  0,  16)   : _lossless_192k_16b,
-    ('FLAC',        1, 192000, 's32',  0,  24)   : _lossless_192k_24b,
-    ('FLAC',        1, 192000, 's32',  0,  32)   : _lossless_192k_32b,
-    ('ALAC',        1, 192000, 's16p', 0,  16)   : _lossless_192k_16b,
-    ('ALAC',        1, 192000, 's32p', 0,  24)   : _lossless_192k_24b,
-    ('ALAC',        1, 192000, 's32p', 0,  32)   : _lossless_192k_32b,
-    ('APE',         1, 192000, 's16p', 0,  16)   : _lossless_192k_16b,
-    ('APE',         1, 192000, 's32p', 0,  24)   : _lossless_192k_24b,
-    ('APE',         1, 192000, 's32p', 0,  32)   : _lossless_192k_32b,
-    ('PCM_S16BE',   1, 192000, 's16',  16, None) : _lossless_192k_16b,
-    ('PCM_S16LE',   1, 192000, 's16',  16, None) : _lossless_192k_16b,
-    ('PCM_S24BE',   1, 192000, 's32',  24, 24)   : _lossless_192k_24b,
-    ('PCM_S24LE',   1, 192000, 's32',  24, 24)   : _lossless_192k_24b,
-    ('PCM_S32BE',   1, 192000, 's32',  32, 32)   : _lossless_192k_32b,
-    ('PCM_S32LE',   1, 192000, 's32',  32, 32)   : _lossless_192k_32b,
-    ('PCM_F32LE',   1, 192000, 'flt',  32, None) : _lossless_192k_32b,
-    ('DTS',         1, 192000, 'fltp', 0,  None) : _lossless_192k_32b,
-    ('WAVPACK',     1, 192000, 's16p', 0,  16)   : _lossless_192k_16b,
+	('ALAC',      1, 176400, 'S16P', 0,  16) : _lossless[(16, 176400)],
+	('ALAC',      1, 176400, 'S32P', 0,  24) : _lossless[(24, 176400)],
+	('ALAC',      1, 176400, 'S32P', 0,  32) : _lossless[(32, 176400)],
+	('ALAC',      1, 192000, 'S16P', 0,  16) : _lossless[(16, 192000)],
+	('ALAC',      1, 192000, 'S32P', 0,  24) : _lossless[(24, 192000)],
+	('ALAC',      1, 192000, 'S32P', 0,  32) : _lossless[(32, 192000)],
+	('ALAC',      1, 44100,  'S16P', 0,  16) : _lossless[(16, 44100)],
+	('ALAC',      1, 44100,  'S32P', 0,  24) : _lossless[(24, 44100)],
+	('ALAC',      1, 44100,  'S32P', 0,  32) : _lossless[(32, 44100)],
+	('ALAC',      1, 48000,  'S16P', 0,  16) : _lossless[(16, 48000)],
+	('ALAC',      1, 48000,  'S32P', 0,  24) : _lossless[(24, 48000)],
+	('ALAC',      1, 48000,  'S32P', 0,  32) : _lossless[(32, 48000)],
+	('ALAC',      1, 96000,  'S16P', 0,  16) : _lossless[(16, 96000)],
+	('ALAC',      1, 96000,  'S32P', 0,  24) : _lossless[(24, 96000)],
+	('ALAC',      1, 96000,  'S32P', 0,  32) : _lossless[(32, 96000)],
+	('APE',       1, 176400, 'S16P', 0,  16) : _lossless[(16, 176400)],
+	('APE',       1, 176400, 'S32P', 0,  24) : _lossless[(24, 176400)],
+	('APE',       1, 176400, 'S32P', 0,  32) : _lossless[(32, 176400)],
+	('APE',       1, 192000, 'S16P', 0,  16) : _lossless[(16, 192000)],
+	('APE',       1, 192000, 'S32P', 0,  24) : _lossless[(24, 192000)],
+	('APE',       1, 192000, 'S32P', 0,  32) : _lossless[(32, 192000)],
+	('APE',       1, 44100,  'S16P', 0,  16) : _lossless[(16, 44100)],
+	('APE',       1, 44100,  'S32P', 0,  24) : _lossless[(24, 44100)],
+	('APE',       1, 44100,  'S32P', 0,  32) : _lossless[(32, 44100)],
+	('APE',       1, 48000,  'S16P', 0,  16) : _lossless[(16, 48000)],
+	('APE',       1, 48000,  'S32P', 0,  24) : _lossless[(24, 48000)],
+	('APE',       1, 48000,  'S32P', 0,  32) : _lossless[(32, 48000)],
+	('APE',       1, 96000,  'S16P', 0,  16) : _lossless[(16, 96000)],
+	('APE',       1, 96000,  'S32P', 0,  24) : _lossless[(24, 96000)],
+	('APE',       1, 96000,  'S32P', 0,  32) : _lossless[(32, 96000)],
+	('DTS',       1, 176400, 'FLTP', 0,  0)  : _lossless[(32, 176400)],
+	('DTS',       1, 192000, 'FLTP', 0,  0)  : _lossless[(32, 192000)],
+	('DTS',       1, 44100,  'FLTP', 0,  0)  : _lossless[(32, 44100)],
+	('DTS',       1, 48000,  'FLTP', 0,  0)  : _lossless[(32, 48000)],
+	('DTS',       1, 96000,  'FLTP', 0,  0)  : _lossless[(32, 96000)],
+	('FLAC',      1, 176400, 'S16',  0,  16) : _lossless[(16, 176400)],
+	('FLAC',      1, 176400, 'S32',  0,  24) : _lossless[(24, 176400)],
+	('FLAC',      1, 176400, 'S32',  0,  32) : _lossless[(32, 176400)],
+	('FLAC',      1, 192000, 'S16',  0,  16) : _lossless[(16, 192000)],
+	('FLAC',      1, 192000, 'S32',  0,  24) : _lossless[(24, 192000)],
+	('FLAC',      1, 192000, 'S32',  0,  32) : _lossless[(32, 192000)],
+	('FLAC',      1, 44100,  'S16',  0,  16) : _lossless[(16, 44100)],
+	('FLAC',      1, 44100,  'S32',  0,  24) : _lossless[(24, 44100)],
+	('FLAC',      1, 44100,  'S32',  0,  32) : _lossless[(32, 44100)],
+	('FLAC',      1, 48000,  'S16',  0,  16) : _lossless[(16, 48000)],
+	('FLAC',      1, 48000,  'S32',  0,  24) : _lossless[(24, 48000)],
+	('FLAC',      1, 48000,  'S32',  0,  32) : _lossless[(32, 48000)],
+	('FLAC',      1, 96000,  'S16',  0,  16) : _lossless[(16, 96000)],
+	('FLAC',      1, 96000,  'S32',  0,  24) : _lossless[(24, 96000)],
+	('FLAC',      1, 96000,  'S32',  0,  32) : _lossless[(32, 96000)],
+	('PCM_F32LE', 1, 176400, 'FLT',  32, 32) : _lossless[(32, 176400)],
+	('PCM_F32LE', 1, 192000, 'FLT',  32, 32) : _lossless[(32, 192000)],
+	('PCM_F32LE', 1, 44100,  'FLT',  32, 32) : _lossless[(32, 44100)],
+	('PCM_F32LE', 1, 48000,  'FLT',  32, 32) : _lossless[(32, 48000)],
+	('PCM_F32LE', 1, 96000,  'FLT',  32, 32) : _lossless[(32, 96000)],
+	('PCM_S16BE', 1, 176400, 'S16',  16, 16) : _lossless[(16, 176400)],
+	('PCM_S16BE', 1, 192000, 'S16',  16, 16) : _lossless[(16, 192000)],
+	('PCM_S16BE', 1, 44100,  'S16',  16, 16) : _lossless[(16, 44100)],
+	('PCM_S16BE', 1, 48000,  'S16',  16, 16) : _lossless[(16, 48000)],
+	('PCM_S16BE', 1, 96000,  'S16',  16, 16) : _lossless[(16, 96000)],
+	('PCM_S16LE', 1, 176400, 'S16',  16, 16) : _lossless[(16, 176400)],
+	('PCM_S16LE', 1, 192000, 'S16',  16, 16) : _lossless[(16, 192000)],
+	('PCM_S16LE', 1, 44100,  'S16',  16, 16) : _lossless[(16, 44100)],
+	('PCM_S16LE', 1, 48000,  'S16',  16, 16) : _lossless[(16, 48000)],
+	('PCM_S16LE', 1, 96000,  'S16',  16, 16) : _lossless[(16, 96000)],
+	('PCM_S24BE', 1, 176400, 'S32',  24, 24) : _lossless[(24, 176400)],
+	('PCM_S24BE', 1, 192000, 'S32',  24, 24) : _lossless[(24, 192000)],
+	('PCM_S24BE', 1, 44100,  'S32',  24, 24) : _lossless[(24, 44100)],
+	('PCM_S24BE', 1, 48000,  'S32',  24, 24) : _lossless[(24, 48000)],
+	('PCM_S24BE', 1, 96000,  'S32',  24, 24) : _lossless[(24, 96000)],
+	('PCM_S24LE', 1, 176400, 'S32',  24, 24) : _lossless[(24, 176400)],
+	('PCM_S24LE', 1, 192000, 'S32',  24, 24) : _lossless[(24, 192000)],
+	('PCM_S24LE', 1, 44100,  'S32',  24, 24) : _lossless[(24, 44100)],
+	('PCM_S24LE', 1, 48000,  'S32',  24, 24) : _lossless[(24, 48000)],
+	('PCM_S24LE', 1, 96000,  'S32',  24, 24) : _lossless[(24, 96000)],
+	('PCM_S32BE', 1, 176400, 'S32',  32, 32) : _lossless[(32, 176400)],
+	('PCM_S32BE', 1, 192000, 'S32',  32, 32) : _lossless[(32, 192000)],
+	('PCM_S32BE', 1, 44100,  'S32',  32, 32) : _lossless[(32, 44100)],
+	('PCM_S32BE', 1, 48000,  'S32',  32, 32) : _lossless[(32, 48000)],
+	('PCM_S32BE', 1, 96000,  'S32',  32, 32) : _lossless[(32, 96000)],
+	('PCM_S32LE', 1, 176400, 'S32',  32, 32) : _lossless[(32, 176400)],
+	('PCM_S32LE', 1, 192000, 'S32',  32, 32) : _lossless[(32, 192000)],
+	('PCM_S32LE', 1, 44100,  'S32',  32, 32) : _lossless[(32, 44100)],
+	('PCM_S32LE', 1, 48000,  'S32',  32, 32) : _lossless[(32, 48000)],
+	('PCM_S32LE', 1, 96000,  'S32',  32, 32) : _lossless[(32, 96000)],
+	('WAVPACK',   1, 176400, 'S16P', 0,  16) : _lossless[(16, 176400)],
+	('WAVPACK',   1, 192000, 'S16P', 0,  16) : _lossless[(16, 192000)],
+	('WAVPACK',   1, 44100,  'S16P', 0,  16) : _lossless[(16, 44100)],
+	('WAVPACK',   1, 48000,  'S16P', 0,  16) : _lossless[(16, 48000)],
+	('WAVPACK',   1, 96000,  'S16P', 0,  16) : _lossless[(16, 96000)],
 
     # LOSSY 44100
-    ('WAVPACK',     1, 44100, 'fltp', 0,  32)   : _lossy_44k_24b,
-    ('WAVPACK',     1, 48000, 'fltp', 0,  32)   : _lossy_48k_24b,
-    ('MP3',         1, 44100, 'fltp', 0,  None) : _lossy_44k_24b,
-    ('MP3',         1, 48000, 'fltp', 0,  None) : _lossy_48k_24b,
-    ('AAC',         1, 44100, 'fltp', 0,  None) : _lossy_44k_24b,
-    ('VORBIS',      1, 44100, 'fltp', 0,  None) : _lossy_44k_24b,
-    ('VORBIS',      1, 48000, 'fltp', 0,  None) : _lossy_48k_24b,
-    ('WMAPRO',      1, 44100, 'fltp', 0,  None) : _lossy_44k_16b,
-    ('WMAV2',       1, 44100, 'fltp', 0,  None) : _lossy_44k_16b,
-    ('WMALOSSLESS', 1, 44100, 's16p', 0,  None) : _lossy_44k_24b,
+	('WAVPACK',     1, 44100, 'FLTP', 0, 32) : _lossy_44k_24b,
+	('WAVPACK',     1, 48000, 'FLTP', 0, 32) : _lossy_48k_24b,
+	('MP3',         1, 44100, 'FLTP', 0, 0)  : _lossy_44k_24b,
+	('MP3',         1, 48000, 'FLTP', 0, 0)  : _lossy_48k_24b,
+	('AAC',         1, 44100, 'FLTP', 0, 0)  : _lossy_44k_24b,
+	('VORBIS',      1, 44100, 'FLTP', 0, 0)  : _lossy_44k_24b,
+	('VORBIS',      1, 48000, 'FLTP', 0, 0)  : _lossy_48k_24b,
+	('WMAPRO',      1, 44100, 'FLTP', 0, 0)  : _lossy_44k_16b,
+	('WMAV2',       1, 44100, 'FLTP', 0, 0)  : _lossy_44k_16b,
+	('WMALOSSLESS', 1, 44100, 'S16P', 0, 0)  : _lossy_44k_24b,
 
-    #('OPUS',      'fltp', 0,  None) : ('opus', 24), # CAUTION
-    ('OPUS',        1, 48000, 'fltp', 0,  None) : _lossy_48k_32b,
+    #('OPUS',      FLTP, 0,  None) : ('opus', 24), # CAUTION
+    ('OPUS',        1, 48000, 'FLTP', 0,  None) : _lossy_48k_32b,
 }
 
 #export LC_ALL=en_US.UTF-8
@@ -478,6 +496,7 @@ try: # THREAD
         ORIGINAL_DURATION         = tags.pop('ORIGINAL_DURATION',         ORIGINAL_DURATION)
 
         #
+        ORIGINAL_SAMPLE_FMT       = str.upper (ORIGINAL_SAMPLE_FMT)
         ORIGINAL_FORMAT_NAME      = str.upper (ORIGINAL_FORMAT_NAME)
         ORIGINAL_FORMAT_NAME_LONG = str.upper (ORIGINAL_FORMAT_NAME_LONG)
         ORIGINAL_CODEC_NAME       = str.upper (ORIGINAL_CODEC_NAME)
@@ -527,7 +546,7 @@ try: # THREAD
                 ORIGINAL_SAMPLE_RATE,
                 ORIGINAL_SAMPLE_FMT,
                 ORIGINAL_BITS,
-                ORIGINAL_BITS_RAW,
+                (ORIGINAL_BITS_RAW if ORIGINAL_BITS_RAW else ORIGINAL_BITS),
             )]
             assert 96 <= br <= 320
         except KeyError as e:
