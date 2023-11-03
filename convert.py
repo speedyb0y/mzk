@@ -36,146 +36,6 @@ import traceback
 import mmap
 import random
 
-_lossless = {
-
-    (16, 44100): 165,
-    (24, 44100): 180,
-    (32, 44100): 190,
-
-    (16, 48000): 170,
-    (24, 48000): 190,
-    (32, 48000): 210,
-
-    (16, 96000): 256,
-    (24, 96000): 280,
-    (32, 96000): 395,
-
-    (16, 176400): 290,
-    (24, 176400): 220,
-    (32, 176400): 235,
-
-    (16, 192000): 300,
-    (24, 192000): 350,
-    (32, 192000): 365,
-}
-
-_lossy_44k_16b = 150
-_lossy_44k_24b = 160
-_lossy_44k_32b = 160
-
-_lossy_48k_16b = 160
-_lossy_48k_24b = 178
-_lossy_48k_32b = 178
-
-mapa = {
-
-	('ALAC',      1, 176400, 'S16P', 0,  16) : _lossless[(16, 176400)],
-	('ALAC',      1, 176400, 'S32P', 0,  24) : _lossless[(24, 176400)],
-	('ALAC',      1, 176400, 'S32P', 0,  32) : _lossless[(32, 176400)],
-	('ALAC',      1, 192000, 'S16P', 0,  16) : _lossless[(16, 192000)],
-	('ALAC',      1, 192000, 'S32P', 0,  24) : _lossless[(24, 192000)],
-	('ALAC',      1, 192000, 'S32P', 0,  32) : _lossless[(32, 192000)],
-	('ALAC',      1, 44100,  'S16P', 0,  16) : _lossless[(16, 44100)],
-	('ALAC',      1, 44100,  'S32P', 0,  24) : _lossless[(24, 44100)],
-	('ALAC',      1, 44100,  'S32P', 0,  32) : _lossless[(32, 44100)],
-	('ALAC',      1, 48000,  'S16P', 0,  16) : _lossless[(16, 48000)],
-	('ALAC',      1, 48000,  'S32P', 0,  24) : _lossless[(24, 48000)],
-	('ALAC',      1, 48000,  'S32P', 0,  32) : _lossless[(32, 48000)],
-	('ALAC',      1, 96000,  'S16P', 0,  16) : _lossless[(16, 96000)],
-	('ALAC',      1, 96000,  'S32P', 0,  24) : _lossless[(24, 96000)],
-	('ALAC',      1, 96000,  'S32P', 0,  32) : _lossless[(32, 96000)],
-	('APE',       1, 176400, 'S16P', 0,  16) : _lossless[(16, 176400)],
-	('APE',       1, 176400, 'S32P', 0,  24) : _lossless[(24, 176400)],
-	('APE',       1, 176400, 'S32P', 0,  32) : _lossless[(32, 176400)],
-	('APE',       1, 192000, 'S16P', 0,  16) : _lossless[(16, 192000)],
-	('APE',       1, 192000, 'S32P', 0,  24) : _lossless[(24, 192000)],
-	('APE',       1, 192000, 'S32P', 0,  32) : _lossless[(32, 192000)],
-	('APE',       1, 44100,  'S16P', 0,  16) : _lossless[(16, 44100)],
-	('APE',       1, 44100,  'S32P', 0,  24) : _lossless[(24, 44100)],
-	('APE',       1, 44100,  'S32P', 0,  32) : _lossless[(32, 44100)],
-	('APE',       1, 48000,  'S16P', 0,  16) : _lossless[(16, 48000)],
-	('APE',       1, 48000,  'S32P', 0,  24) : _lossless[(24, 48000)],
-	('APE',       1, 48000,  'S32P', 0,  32) : _lossless[(32, 48000)],
-	('APE',       1, 96000,  'S16P', 0,  16) : _lossless[(16, 96000)],
-	('APE',       1, 96000,  'S32P', 0,  24) : _lossless[(24, 96000)],
-	('APE',       1, 96000,  'S32P', 0,  32) : _lossless[(32, 96000)],
-	('DTS',       1, 176400, 'FLTP', 0,  0)  : _lossless[(32, 176400)],
-	('DTS',       1, 192000, 'FLTP', 0,  0)  : _lossless[(32, 192000)],
-	('DTS',       1, 44100,  'FLTP', 0,  0)  : _lossless[(32, 44100)],
-	('DTS',       1, 48000,  'FLTP', 0,  0)  : _lossless[(32, 48000)],
-	('DTS',       1, 96000,  'FLTP', 0,  0)  : _lossless[(32, 96000)],
-	('FLAC',      1, 176400, 'S16',  0,  16) : _lossless[(16, 176400)],
-	('FLAC',      1, 176400, 'S32',  0,  24) : _lossless[(24, 176400)],
-	('FLAC',      1, 176400, 'S32',  0,  32) : _lossless[(32, 176400)],
-	('FLAC',      1, 192000, 'S16',  0,  16) : _lossless[(16, 192000)],
-	('FLAC',      1, 192000, 'S32',  0,  24) : _lossless[(24, 192000)],
-	('FLAC',      1, 192000, 'S32',  0,  32) : _lossless[(32, 192000)],
-	('FLAC',      1, 44100,  'S16',  0,  16) : _lossless[(16, 44100)],
-	('FLAC',      1, 44100,  'S32',  0,  24) : _lossless[(24, 44100)],
-	('FLAC',      1, 44100,  'S32',  0,  32) : _lossless[(32, 44100)],
-	('FLAC',      1, 48000,  'S16',  0,  16) : _lossless[(16, 48000)],
-	('FLAC',      1, 48000,  'S32',  0,  24) : _lossless[(24, 48000)],
-	('FLAC',      1, 48000,  'S32',  0,  32) : _lossless[(32, 48000)],
-	('FLAC',      1, 96000,  'S16',  0,  16) : _lossless[(16, 96000)],
-	('FLAC',      1, 96000,  'S32',  0,  24) : _lossless[(24, 96000)],
-	('FLAC',      1, 96000,  'S32',  0,  32) : _lossless[(32, 96000)],
-	('PCM_F32LE', 1, 176400, 'FLT',  32, 32) : _lossless[(32, 176400)],
-	('PCM_F32LE', 1, 192000, 'FLT',  32, 32) : _lossless[(32, 192000)],
-	('PCM_F32LE', 1, 44100,  'FLT',  32, 32) : _lossless[(32, 44100)],
-	('PCM_F32LE', 1, 48000,  'FLT',  32, 32) : _lossless[(32, 48000)],
-	('PCM_F32LE', 1, 96000,  'FLT',  32, 32) : _lossless[(32, 96000)],
-	('PCM_S16BE', 1, 176400, 'S16',  16, 16) : _lossless[(16, 176400)],
-	('PCM_S16BE', 1, 192000, 'S16',  16, 16) : _lossless[(16, 192000)],
-	('PCM_S16BE', 1, 44100,  'S16',  16, 16) : _lossless[(16, 44100)],
-	('PCM_S16BE', 1, 48000,  'S16',  16, 16) : _lossless[(16, 48000)],
-	('PCM_S16BE', 1, 96000,  'S16',  16, 16) : _lossless[(16, 96000)],
-	('PCM_S16LE', 1, 176400, 'S16',  16, 16) : _lossless[(16, 176400)],
-	('PCM_S16LE', 1, 192000, 'S16',  16, 16) : _lossless[(16, 192000)],
-	('PCM_S16LE', 1, 44100,  'S16',  16, 16) : _lossless[(16, 44100)],
-	('PCM_S16LE', 1, 48000,  'S16',  16, 16) : _lossless[(16, 48000)],
-	('PCM_S16LE', 1, 96000,  'S16',  16, 16) : _lossless[(16, 96000)],
-	('PCM_S24BE', 1, 176400, 'S32',  24, 24) : _lossless[(24, 176400)],
-	('PCM_S24BE', 1, 192000, 'S32',  24, 24) : _lossless[(24, 192000)],
-	('PCM_S24BE', 1, 44100,  'S32',  24, 24) : _lossless[(24, 44100)],
-	('PCM_S24BE', 1, 48000,  'S32',  24, 24) : _lossless[(24, 48000)],
-	('PCM_S24BE', 1, 96000,  'S32',  24, 24) : _lossless[(24, 96000)],
-	('PCM_S24LE', 1, 176400, 'S32',  24, 24) : _lossless[(24, 176400)],
-	('PCM_S24LE', 1, 192000, 'S32',  24, 24) : _lossless[(24, 192000)],
-	('PCM_S24LE', 1, 44100,  'S32',  24, 24) : _lossless[(24, 44100)],
-	('PCM_S24LE', 1, 48000,  'S32',  24, 24) : _lossless[(24, 48000)],
-	('PCM_S24LE', 1, 96000,  'S32',  24, 24) : _lossless[(24, 96000)],
-	('PCM_S32BE', 1, 176400, 'S32',  32, 32) : _lossless[(32, 176400)],
-	('PCM_S32BE', 1, 192000, 'S32',  32, 32) : _lossless[(32, 192000)],
-	('PCM_S32BE', 1, 44100,  'S32',  32, 32) : _lossless[(32, 44100)],
-	('PCM_S32BE', 1, 48000,  'S32',  32, 32) : _lossless[(32, 48000)],
-	('PCM_S32BE', 1, 96000,  'S32',  32, 32) : _lossless[(32, 96000)],
-	('PCM_S32LE', 1, 176400, 'S32',  32, 32) : _lossless[(32, 176400)],
-	('PCM_S32LE', 1, 192000, 'S32',  32, 32) : _lossless[(32, 192000)],
-	('PCM_S32LE', 1, 44100,  'S32',  32, 32) : _lossless[(32, 44100)],
-	('PCM_S32LE', 1, 48000,  'S32',  32, 32) : _lossless[(32, 48000)],
-	('PCM_S32LE', 1, 96000,  'S32',  32, 32) : _lossless[(32, 96000)],
-	('WAVPACK',   1, 176400, 'S16P', 0,  16) : _lossless[(16, 176400)],
-	('WAVPACK',   1, 192000, 'S16P', 0,  16) : _lossless[(16, 192000)],
-	('WAVPACK',   1, 44100,  'S16P', 0,  16) : _lossless[(16, 44100)],
-	('WAVPACK',   1, 48000,  'S16P', 0,  16) : _lossless[(16, 48000)],
-	('WAVPACK',   1, 96000,  'S16P', 0,  16) : _lossless[(16, 96000)],
-
-    # LOSSY 44100
-	('WAVPACK',     1, 44100, 'FLTP', 0, 32) : _lossy_44k_24b,
-	('WAVPACK',     1, 48000, 'FLTP', 0, 32) : _lossy_48k_24b,
-	('MP3',         1, 44100, 'FLTP', 0, 0)  : _lossy_44k_24b,
-	('MP3',         1, 48000, 'FLTP', 0, 0)  : _lossy_48k_24b,
-	('AAC',         1, 44100, 'FLTP', 0, 0)  : _lossy_44k_24b,
-	('VORBIS',      1, 44100, 'FLTP', 0, 0)  : _lossy_44k_24b,
-	('VORBIS',      1, 48000, 'FLTP', 0, 0)  : _lossy_48k_24b,
-	('WMAPRO',      1, 44100, 'FLTP', 0, 0)  : _lossy_44k_16b,
-	('WMAV2',       1, 44100, 'FLTP', 0, 0)  : _lossy_44k_16b,
-	('WMALOSSLESS', 1, 44100, 'S16P', 0, 0)  : _lossy_44k_24b,
-
-    #('OPUS',      FLTP, 0,  None) : ('opus', 24), # CAUTION
-    ('OPUS',        1, 48000, 'FLTP', 0,  None) : _lossy_48k_32b,
-}
-
 #export LC_ALL=en_US.UTF-8
 
 # WHERE TO SAVE THE CONVERTED FILES
@@ -527,31 +387,10 @@ try: # THREAD
             continue
 
         #
-        isBinaural = any('BINAURAL' in v.upper() for v in (original, *tags.values()))
-
-        if isBinaural:
-            print(f'[{tid}] {original}: SKIPPED: BINAURAL')
-            continue
-
-        #
-        channels = 1 + isBinaural
-
-        # TODO:
-        assert channels == 1
-
-        #
-        try:
-            br = mapa[(
-                ORIGINAL_CODEC_NAME, channels,
-                ORIGINAL_SAMPLE_RATE,
-                ORIGINAL_SAMPLE_FMT,
-                ORIGINAL_BITS,
-                (ORIGINAL_BITS_RAW if ORIGINAL_BITS_RAW else ORIGINAL_BITS),
-            )]
-            assert 96 <= br <= 500
-        except KeyError as e:
-            print(f'[{tid}] {original}: ERROR: EITAAAAAAA!!!', repr(e))
-            continue
+        if any('BINAURAL' in v.upper() for v in (original, *tags.values())):
+            channels = ORIGINAL_CHANNELS
+        else:
+            channels = 1
 
         #
         for f in (encoded, decoded, tmpGood, tmpBad):
@@ -577,7 +416,7 @@ try: # THREAD
             '--quiet',
             '--music',
             '--comp', '10',
-            '--bitrate', str(br),
+            '--bitrate', '290',
             '--raw',
             '--raw-endianness', '0',
             '--raw-bits', '24',
@@ -705,3 +544,5 @@ except BaseException:
     traceback.print_exc()
 
 print(f'[{tid}] EXITING')
+
+exit(0)
