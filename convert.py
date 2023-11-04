@@ -293,7 +293,9 @@ try: # THREAD
     while original := os.read(pipeIn, 2048):
         original = original.decode()
 
-        i = o = imap = ibuff = fp = fpFormat = fpStream = args = None
+        i = o = imap = ibuff = fp = fpStream = cmd = None
+
+        XID = XTIME = XPATH = XCHANNELS = XCHANNELS_LAYOUT = XBITS = XBITS_FMT = XBITS_RAW = XHZ = XDURATION = XFORMAT = XFORMAT_NAME = XCODEC = XCODEC_NAME = XBITRATE = None
 
         # ONLY IF EXISTS
         try:
@@ -322,35 +324,15 @@ try: # THREAD
                 with os.popen(f'ffprobe -v quiet -print_format json -show_format -show_streams -- /proc/{os.getpid()}/fd/{xxx.fileno()}') as fd:
                     fp = json.loads(fd.read(1*1024*1024))
 
-            try:
-                fpFormat  = fp['format']
-            except KeyError:
-                print(f'[{tid}] {original}: ERROR: NO FFPROBE FORMAT!')
-                continue
-
             fpStream, = (s for s in fp['streams'] if s['codec_type'] == 'audio') # NOTE: ONLY SUPPORT FILES WITH 1 AUDIO STREAM
 
-            (
-                # FORMAT
-                XFORMAT,
-                XFORMAT_NAME,
-                ORIGINAL_TAGS,
+            ( # FORMAT
+                XFORMAT, XFORMAT_NAME, ORIGINAL_TAGS,
                 # STREAM
-                XCODEC,
-                XCODEC_NAME,
-                XBITS_FMT,
-                XHZ,
-                XCHANNELS,
-                XCHANNELS_LAYOUT,
-                XBITS,
-                XBITS_RAW,
-                XDURATION,
-                XBITRATE,
-                ORIGINAL_TAGS2
-
+                XCODEC, XCODEC_NAME, XBITS_FMT, XHZ, XCHANNELS, XCHANNELS_LAYOUT, XBITS, XBITS_RAW, XDURATION, XBITRATE, ORIGINAL_TAGS2
             ) = ( (d[k] if k in d and d[k] != '' else None)
                 for d, K in (
-                    ( fpFormat, (
+                    ( fp['format'], (
                         'format_name',
                         'format_long_name',
                         'tags',
@@ -480,7 +462,7 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS}')
             continue
 
-        if not (XBITS_FMT in ('S16', 'S32')):
+        if not (XBITS_FMT in ('S16', 'S16P', 'S32')):
             print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XBITS_FMT}')
             continue
 
@@ -508,7 +490,7 @@ try: # THREAD
                 pass
 
         # FFMPEG/LIBOPUS
-        cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-map_metadata', '-1', '-f', 'opus', '-c:a', 'libopus', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10' ]
+        cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-bitexact', '-i', original, '-map_metadata', '-1', '-f', 'opus', '-c:a', 'libopus', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10' ]
 
         # cutoff (N.A.)
         # mapping_family (mapping_family)
@@ -521,41 +503,24 @@ try: # THREAD
         else:
             cmd.extend(('-apply_phase_inv', '0', '-ac', '1'))
 
-        #
-        #cmd.extend(('-b:a', '290k'))
-        cmd.extend(('-b', f'{290*1024}'))
+        # BIT RATE
+        cmd.extend(('-b:a', f'256k'))
+        # cmd.extend(('-b', f'{256*1024}'))
 
-        #
+        # OUR TAGS
         for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE'):
             if v := eval(t):
                 cmd.extend(('-metadata', f'{t}={v}'))
 
-        # USE THEM
+        # ORIGINAL TAGS
         for t, v in tags.items():
             if v := '|'.join(sorted(v)):
                 cmd.extend(('-metadata', f'{t}={v}'))
 
-        #
+        # THE OUTPUT FILE
         cmd.append(encoded)
 
-        # EXECUTE THE DECODER
-        # DECODE FIXME: error vs quiet?
-
-        # FFMPEG -> OPUSENC
-        # cmd, argc = [ '/usr/bin/opusenc', decoded, encoded,
-            # '--quiet',
-            # '--music',
-            # '--comp', '10',
-            # '--bitrate', '290',
-            # # '--raw',
-            # # '--raw-endianness', '0',
-            # # '--raw-bits', '24',
-            # # '--raw-chan', str(channels),
-            # # '--raw-rate', str(fpStream['sample_rate']),
-        # ], '--comment'
-        # execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', 'wav', '-c:a', 'pcm_f32le', '-bitexact', '-flags', '+bitexact', '-map_metadata', '-1', decoded))
-
-        # EXECUTE THE ENCODER
+        # EXECUTE THE CONVERSOR
         if execute('/usr/bin/ffmpeg', cmd):
             print(f'[{tid}] {original}: ERROR: ENCODE FAILED.')
             continue
