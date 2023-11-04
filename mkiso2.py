@@ -23,19 +23,19 @@ assert 1 <= len(volumeName) <= 30
 
 ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-DIRS = [f'{a}/{b}' for a in ALPHABET for b in ALPHABET]
+DIRS0 = ['/'.join((a, )) for a in ALPHABET]
+DIRS1 = ['/'.join((a,b)) for a in ALPHABET for b in ALPHABET]
 
 def dhash (i):
     # QUANTOS POR DIRETORIO
-    return DIRS[i // ((len(reais) // len(DIRS)) + ((len(reais) % len(DIRS)) != 0))]
+    return DIRS1[i // ((len(reais) // len(DIRS1)) + ((len(reais) % len(DIRS1)) != 0))]
 
 def mhash ():
 
     f  = int.from_bytes(os.read(RANDOMFD, 8), byteorder = 'little', signed=False)
-    f += int(time.time() * 1000000)
     f += int(time.monotonic() * 1000000)
     f += int(random.random() * 0xFFFFFFFFFFFFFFFF)
-    f += f >> 48
+    f += f >> 32
     f %= len(ALPHABET) ** 12
 
     code = ''
@@ -79,9 +79,10 @@ def FIOMAP (f):
 
 # reais = reais[:5]
 reais = sorted(map(FIOMAP, reais))
-reais = [(orig, st, new + orig[orig.find('.'):]) for (mm, start, st, orig), new in zip(reais, sorted(mhash() for _ in reais))]
+reais = [(orig, st, new + orig[orig.rfind('.'):]) for (mm, start, st, orig), new in zip(reais, sorted(mhash() for _ in reais))]
 
 # RESERVE THE MAP
+'''
 m = ( b'ISOFS64\x00'                                                       # MAGIC
    +              (0).to_bytes(length=8, byteorder='little', signed=False) # CHECKSUM (HDR + FILES HDR)
    +              (0).to_bytes(length=8, byteorder='little', signed=False) # TOTAL SIZE
@@ -97,36 +98,34 @@ m = ( b'ISOFS64\x00'                                                       # MAG
    +    name.encode() + b'\x00' * (32 - len(name))               # NAME
    )  for r, st, name in reais)
 )
+'''
 
-assert len(m) == (1 + len(reais)) * 64
-
-# ALIGNED SIZE
-m += b'\x00' * ( (((len(m) + ISO_BLOCK - 1) // ISO_BLOCK) * ISO_BLOCK) - len(m) )
-assert len(m) % ISO_BLOCK == 0
+# TOTAL
+MSIZE = (1 + len(reais)) * 64
+# CONFORME ISOFS
+MSIZE = ((MSIZE + ISO_BLOCK - 1) // ISO_BLOCK) * ISO_BLOCK
 
 fd = os.open('...', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o0444)
-assert os.write(fd, m) == len(m)
+os.truncate(fd, MSIZE)
+assert os.write(fd, b'ISOFS64\x00') == 8
 os.close(fd)
 
 # CREATE THE DIRECTORIES
-for d in ALPHABET: os.mkdir(d)
-for d in DIRS    : os.mkdir(d)
+for d in (DIRS0, DIRS1):
+    for d in d:
+        os.mkdir(d)
 
 # PUT THE FILES IN THE DIRECTORIES
 for i, (r, st, n) in enumerate(reais):
     os.symlink(r, f'{dhash(i)}/{n}')
 
 # TODO: REMDIR TODOS OS DIRETIORIOS PARE ELIMINAR OS VAZIOS
-for d in DIRS:
-    try:
-        os.rmdir(d)
-    except:
-        pass
-for d in ALPHABET:
-    try:
-        os.rmdir(d)
-    except:
-        pass
+for d in (DIRS1, DIRS0):
+    for d in d:
+        try:
+            os.rmdir(d)
+        except:
+            pass
 
 #############################################################
 # CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
@@ -134,18 +133,13 @@ for d in ALPHABET:
 # TODO: AQUELE PADDING QUE O MKISOFS FAZ
 PADDING = 128*ISO_BLOCK
 
-osize = ((8*1024*1024 + len(DIRS)*256 + (128 + len(m) + ISO_BLOCK) + sum((128 + st.st_size + ISO_BLOCK) for r, st, n in reais) + PADDING + DISK_BLOCK - 1) // DISK_BLOCK) * DISK_BLOCK
+osize = ((8*1024*1024 + len(DIRS1)*256 + (128 + MSIZE + ISO_BLOCK) + sum((128 + st.st_size + ISO_BLOCK) for r, st, n in reais) + PADDING + DISK_BLOCK - 1) // DISK_BLOCK) * DISK_BLOCK
 #osize = -print-size
 
 print('OSIZE:', osize)
 
-ofd = os.open(opath, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o0444)
+ofd = os.open(opath, os.O_RDWR | os.O_DIRECT)
 assert 0 <= ofd #  | os.O_DIRECT
-
-try:
-    os.fallocate(ofd, osize)
-except AttributeError:
-    assert os.system(f'fallocate -l {osize} /proc/{os.getpid()}/fd/{ofd}') == 0
 
 obuff = mmap.mmap(-1, 1*1024*1024*1024, mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS, mmap.PROT_READ | mmap.PROT_WRITE, 0)
 oview = memoryview(obuff)
@@ -159,7 +153,7 @@ with open('/tmp/sort', 'w') as fd:
 
 #os.system('mkisofs -untranslated-filenames -o /mnt/sda2/TESTE.iso.tmp --follow-links -sort /tmp/sort .')
 
-pipe = os.popen('mkisofs -quiet -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
+pipe = os.popen(f'mkisofs -quiet -input-charset ASCII -follow-links -posix-L -V {volumeName} -p speedyb0y -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
 
 end = 0
@@ -174,7 +168,7 @@ while (h := obuff.find(b'ISOFS64\x00', 0, end)) == -1:
 assert 8192 <= h
 
 # TERMINA DE LER ELE
-end_ = h + len(m)
+end_ = h + MSIZE
 while end < end_:
     c = pipeIO.readinto(oview[end:end_])
     assert 1 <= c
@@ -229,12 +223,26 @@ assert os.write(ofd, oview[:end]) == end
 
 total += end
 
+print('TOTAL:', total)
+
 assert total <= osize
 
-os.fsync(ofd)
-os.ftruncate(ofd, total)
 os.fsync(ofd)
 os.close(ofd)
 
 oview.release()
 obuff.close()
+
+# CLEANUP
+for i, (r, st, n) in enumerate(reais):
+    os.unlink(f'{dhash(i)}/{n}')
+
+os.unlink('...')
+
+for d in (DIRS1, DIRS0):
+    for d in d:
+        try:
+            os.rmdir(d)
+        except FileNotFoundError:
+            pass
+

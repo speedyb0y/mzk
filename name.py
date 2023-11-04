@@ -16,15 +16,13 @@ assert 1 <= N <= 1000*1000
 RANDOMFD = os.open('/dev/urandom', os.O_RDONLY)
 assert 0 <= RANDOMFD <= 10
 
-ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+ALPHABET = '0123456789@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 
 def mhash (length):
 
     f  = int.from_bytes(os.read(RANDOMFD, 8), byteorder = 'little', signed=False)
-    f += int(time.time() * 1000000)
-    f += int(time.monotonic() * 1000000)
-    f += int(random.random() * 0xFFFFFFFFFFFFFFFF)
-    f += f >> 48
+    f += int(time.monotonic() * 1000)
+    f += f >> 32
     f %= len(ALPHABET) ** length
 
     code = ''
