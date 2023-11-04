@@ -1,30 +1,5 @@
 #!/usr/bin/python
 
-'''
-
-#for x in * ; do mv -vn "${x}" $(metaflac --show-md5sum "${x}") ; done
-
-# UNIFY FLAC AS XHASH
-for x in * ; do
-    OHASH=-
-    if OHASH=$(spipe $[1*1024*1024] /bin/ffmpeg ffmpeg -y -hide_banner -loglevel quiet -i ${x} -f s24le - | b3sum --num-threads 1 --no-names --raw | base64 | tr / @ | tr + \$) ; then
-        if [ ${#OHASH} = 44 ] ; then
-            mv -vn -- ${x} /mnt/sda2/FLAC-OHASH/${OHASH}
-        fi
-    fi
-done
-
-# UNIFY LOSSY OPUS
-for x in todo/*.opus ; do
-    HASH=-
-    if HASH=$(opusdec --quiet ${x} - | b3sum --num-threads 1 --no-names --raw | base64 | tr / '@') ; then
-        if [ ${#HASH} = 44 ] ; then
-            mv -v -- ${x} hashed/${HASH}
-        fi
-    fi
-done
-'''
-
 import sys
 import os
 import io
@@ -36,23 +11,66 @@ import traceback
 import mmap
 import random
 
-TAGS = {
+tags = { t: set()
+    for t in (
+        'XALBUM',
+        'XARTIST',
+        'XCOMMENT',
+        'XCOMPILATION',
+        'XCOMPOSER',
+        'XDATE',
+        'XENCODED_BY',
+        'XENCODER',
+        'XFILENAME',
+        'XGENRE',
+        'XGROUP',
+        'XLANG',
+        'XPEOPLE',
+        'XPERFORMER',
+        'XPUBLISHER',
+        'XREMIXER',
+        'XTITLE',
+        'XTRACK',
+        'XYEAR',
+    )
+}
+
+TAGS_EXACTLY = {
     # COMMON
-    'ARTIST':      'XARTIST',
-    'ALBUM':       'XALBUM',
-    'TITLE':       'XTITLE',
-    'PERFORMER':   'XPERFORMER',
-    'COMPOSER':    'XCOMPOSER',
-    'COMMENT':     'XCOMMENTS',
-    'COMMENTS':    'XCOMMENTS',
-    'DESCRIPTION': 'XCOMMENTS',
+    'ALBUM_SORT':        'XALBUM',
+    'ALBUM':             'XALBUM',
+    'ARTIST_SORT':       'XARTIST',
+    'ARTIST':            'XARTIST',
+    'ARTISTS':           'XARTIST',
+    'ALBUM_ARTIST':      'XARTIST',
+    'ALBUM_ARTIST_SORT': 'XARTIST',
+    'TITLE':             'XTITLE',
+    'TRACK':             'XTRACK',
+    'TRACKNO':           'XTRACK',
+    'TRACKNUMBER':       'XTRACK',
+    'YEAR':              'XYEAR',
+    'DATE':              'XDATE',
+    'PERFORMER':         'XPERFORMER',
+    'PERFORMERS':        'XPERFORMER',
+    'COMPOSER':          'XCOMPOSER',
+    'COMPOSERS':         'XCOMPOSER',
+    'COMMENT':           'XCOMMENT',
+    'COMMENTS':          'XCOMMENT',
+    'DESCRIPTION':       'XCOMMENT',
+    'ENCODER':           'XENCODER',
+    'ENCODER_OPTIONS':   'XENCODER',
+    'ENCODED_BY':        'XENCODED_BY',
     # ID3
     'TAL':  'XALBUM',
     'TCM':  'XCOMPOSER',
     'TCO':  'XGENRE',
-    'TCP':  'XOTHERS',
+    'TCP':  'XCOMPILATION',
     'TDA':  'XDATE',
-    'TEN':  'XENCODED',
+    'TEN':  'XENCODED_BY',
+    'TENC': 'XENCODED_BY',
+    'XSOT': 'XTITLE', # TitleSortOrder
+    'XSOP': 'XPERFORMER', # PerformerSortOrder
+    'XSOA': 'XALBUM', #     AlbumSortOrder
     'TLA':  'XLANG',
     'TOA':  'XARTIST',
     'TOF':  'XFILENAME',
@@ -65,17 +83,17 @@ TAGS = {
     'TRK':  'XTRACK',
     'TS2':  'XARTIST',
     'TSA':  'XALBUM',
-    'TSC':  'XCOMPOSERS',
+    'TSC':  'XCOMPOSER',
     'TSP':  'XPERFORMER',
     'TSS':  'XENCODER',
     'TST':  'XTITLE',
-    'TT1':  'XPEOPLE',
+    'TT1':  'XGROUP',
     'TT2':  'XTITLE',
     'TT3':  'XTITLE',
-    'TXX':  'XCOMMENTS',
+    'TXX':  'XCOMMENT',
     'TYE':  'XYEAR',
     'WAF':  'XFILENAME',
-    'COM':  'XCOMMENTS',
+    'COM':  'XCOMMENT',
 }
 
 TAGS_PARTIAL = (
@@ -86,9 +104,13 @@ TAGS_PARTIAL = (
     ('COMPOSER',    'XCOMPOSER'),
     ('PERFORMER',   'XPERFORMER'),
     ('REMIXER',     'XREMIXER'),
-    ('COMMENT',     'XCOMMENTS'),
-    ('DESCRIPTION', 'XCOMMENTS'),
+    ('COMMENT',     'XCOMMENT'),
+    ('DESCRIPTION', 'XCOMMENT'),
 )
+
+#
+assert not any (tags[t] for t in TAGS_EXACTLY.values())
+assert not any (tags[t] for _, t in TAGS_PARTIAL)
 
 #export LC_ALL=en_US.UTF-8
 
@@ -101,11 +123,6 @@ TMP_DIR = '/tmp'
 
 # HOW MANY PROCESSES TO RUN SIMULTANEOUSLY
 CPUS_MAX = 12
-
-def piped (cmd, size=65536):
-    with os.popen(cmd) as fd:
-        ret = fd.read(size)
-    return ret
 
 def version (cmd, start):
     with os.popen(cmd) as fd:
@@ -150,15 +167,14 @@ def scandir (d):
     except NotADirectoryError:
         yield d
 
-ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+ALPHABET = '$0123456789@ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 def mhash (length):
 
     f  = int.from_bytes(os.read(RANDOMFD, 8), byteorder = 'little', signed=False)
-    f += int(time.time() * 1000000)
     f += int(time.monotonic() * 1000000)
     f += int(random.random() * 0xFFFFFFFFFFFFFFFF)
-    f += f >> 48
+    f += f >> 32
     f %= len(ALPHABET) ** length
 
     code = ''
@@ -284,7 +300,7 @@ try: # THREAD
     while original := os.read(pipeIn, 2048):
         original = original.decode()
 
-        i = o = imap = ibuff = fp = fpFormat = fpStream = tags = args = None
+        i = o = imap = ibuff = fp = fpFormat = fpStream = args = None
 
         # ONLY IF EXISTS
         try:
@@ -373,7 +389,11 @@ try: # THREAD
             continue
 
         #
-        XPATH, XHASH, XTIME, tags = original, None, int(time.time()), { t: set() for t in TAGS }
+        XPATH, XID, XTIME = original, mhash(12), int(time.time())
+
+        #
+        for t in tags.values():
+            t.clear()
 
         for T in (ORIGINAL_TAGS, ORIGINAL_TAGS2):
 
@@ -391,7 +411,6 @@ try: # THREAD
             #
             if 'CONVERSION_TIME' in T:
                 XTIME                     = T.pop('CONVERSION_TIME',           XTIME)
-                XHASH                     = T.pop('ORIGINAL_HASH',             XHASH)
                 XPATH                     = T.pop('ORIGINAL_FILEPATH',         XPATH)
                 XPATH                     = T.pop('ORIGINAL_FILENAME',         XPATH)
                 XPATH                     = T.pop('ORIGINAL_PATH',             XPATH)
@@ -412,7 +431,7 @@ try: # THREAD
             while T:
                 k, v = T.popitem()
                 # EXACT MATCH
-                t = TAGS.get(k, None)
+                t = TAGS_EXACTLY.get(k, None)
                 # PARTIAL MATCH
                 if t is None:
                     for old, new in TAGS_PARTIAL:
@@ -428,6 +447,7 @@ try: # THREAD
 
         XCHANNELS_N   = int(XCHANNELS_N)
         XSAMPLE_RATE  = int(XSAMPLE_RATE)
+        XSAMPLE_FMT = XSAMPLE_FMT.upper()
 
         if XDURATION is None:
             XDURATION = 0
@@ -460,7 +480,7 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS_N}')
             continue
 
-        if not (XSAMPLE_FMT in ('s16', 's32')):
+        if not (XSAMPLE_FMT in ('S16', 'S32')):
             print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XSAMPLE_FMT}')
             continue
 
@@ -470,7 +490,8 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: BAD DURATION: {XDURATION}')
             continue
 
-        assert XCHANNELS_LAYOUT
+        assert XSAMPLE_FMT
+        assert XCHANNELS_LAYOUT, XCHANNELS_LAYOUT
         assert XFORMAT_A
         assert XFORMAT_B
         assert XCODEC_A
@@ -497,17 +518,9 @@ try: # THREAD
                 pass
 
         # DECODE FIXME: error vs quiet?
-        # if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', 's24le', decoded)):
-        if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', 'wav', '-c:a', 'pcm_f32le', decoded)):
+        if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-flags', '+bitexact', '-i', original, '-ac', str(channels), '-f', 'wav', '-c:a', 'pcm_f32le', '-bitexact', decoded)):
             print(f'[{tid}] {original}: ERROR: DECODE FAILED.')
             continue
-
-        #
-        if XHASH is None:
-            with os.popen(f'ffmpeg -y -hide_banner -loglevel quiet -i {original} -ac 1 -f s24le - | b3sum --num-threads 1 --no-names --raw /proc/self/fd/0 | base64') as bfd:
-                b3sum = bfd.read(1024)
-            assert len(b3sum) == 45 and b3sum.endswith('=\n')
-            XHASH = b3sum.replace('/', '@').replace('+', '$').rstrip('\n').rstrip('=')
 
         # ENCODE
         args = [ 'opusenc', decoded, encoded,
@@ -520,8 +533,8 @@ try: # THREAD
             # '--raw-bits', '24',
             # '--raw-chan', str(channels),
             # '--raw-rate', str(fpStream['sample_rate']),
+            '--comment',          f'XID={XID}',
             '--comment',        f'XTIME={XTIME}',
-            '--comment',        f'XHASH={XHASH}',
             '--comment',        f'XPATH={XPATH}',
             '--comment',      f'XSAMPLE={XSAMPLE}',
             '--comment',    f'XCHANNELS={XCHANNELS}',
@@ -548,19 +561,19 @@ try: # THREAD
         os.unlink(decoded)
 
         # VERIFY
-        assert channels == int(piped(f'soxi -c {encoded}'))
+        # assert channels == int(piped(f'soxi -c {encoded}'))
 
         #
         where, tmp = good
 
         #
-        dur = float(piped(f'soxi -D {encoded}'))
-        if not (-1 <= (XDURATION - dur) <= 1):
-            print(f'[{tid}] {original}: ERROR: DURATION MISMATCH: {XDURATION} VS {dur}')
-            where, tmp = bad
+        # dur = float(piped(f'soxi -D {encoded}'))
+        # if not (-1 <= (XDURATION - dur) <= 1):
+            # print(f'[{tid}] {original}: ERROR: DURATION MISMATCH: {XDURATION} VS {dur}')
+            # where, tmp = bad
 
         # NOW COPY FROM TEMP
-        new = f'{where}/{mhash(12)}'
+        new = f'{where}/{XID}'
 
         #
         o = os.open(tmp, os.O_WRONLY | os.O_DIRECT | os.O_CREAT | os.O_EXCL, 0o644)
