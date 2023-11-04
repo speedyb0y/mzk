@@ -129,22 +129,17 @@ def version (cmd, start):
         ret = fd.read(65536).startswith(start)
     return ret
 
+# EXECUTE A COMMAND, WAIT FOR ALL IT'S CHILDS, AND RETURN ANY FAILURE FROM ANY OF THEM
 def execute (executable, args, env=os.environ):
-
-    pid = os.fork()
-
-    if pid == 0:
+    if os.fork() == 0:
         os.execve(executable, args, env)
         exit(1)
-
     fail = 0
-
     try:
         while True:
             fail |= os.wait()[1]
     except ChildProcessError:
         pass
-
     return fail
 
 #
@@ -167,25 +162,23 @@ def scandir (d):
     except NotADirectoryError:
         yield d
 
-ALPHABET = '$0123456789@ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@'
 
-def mhash (length):
+def mhash ():
 
     f  = int.from_bytes(os.read(RANDOMFD, 8), byteorder = 'little', signed=False)
-    f += int(time.monotonic() * 1000000)
+    f += int(time.monotonic() * 10000000)
     f += int(random.random() * 0xFFFFFFFFFFFFFFFF)
     f += f >> 32
-    f %= len(ALPHABET) ** length
+    f &= 0xFFFFFFFFFFFFFFFF
 
     code = ''
 
-    while f:
+    while True:
         code += ALPHABET[f % len(ALPHABET)]
         f //= len(ALPHABET)
-
-    code += ALPHABET[0] * (length - len(code))
-
-    return code
+        if f == 0:
+            return code
 
 PID = os.getpid()
 assert 1 <= PID <= 0xFFFFFFFF
@@ -194,8 +187,8 @@ assert 1 <= PID <= 0xFFFFFFFF
 RANDOMFD = os.open('/dev/urandom', os.O_RDONLY)
 assert 0 <= RANDOMFD <= 10
 
-TNAME = mhash(13)
-assert len(TNAME) == 13
+TNAME = mhash()
+assert len(TNAME) >= 4
 
 CPUS = open('/proc/cpuinfo').read().count('processor\t:')
 assert 1 <= CPUS <= 512
@@ -267,7 +260,7 @@ if tid == CPUS:
     # CLEAR ALL FILES
     for tid in range(CPUS):
         for f in (
-            f'{TMP_DIR}/{TNAME}/{tid}-decoded',
+            # # # # # # # # # # f'{TMP_DIR}/{TNAME}/{tid}-decoded',
             f'{TMP_DIR}/{TNAME}/{tid}-encoded',
            f'{GOOD_DIR}/{TNAME}-{tid}.tmp',
             f'{BAD_DIR}/{TNAME}-{tid}.tmp',
@@ -288,7 +281,7 @@ try: # THREAD
     os.close(pipeOut)
 
     #
-    decoded = f'{TMP_DIR}/{TNAME}/{tid}-decoded'
+    # # # # # # # # # # decoded = f'{TMP_DIR}/{TNAME}/{tid}-decoded'
     encoded = f'{TMP_DIR}/{TNAME}/{tid}-encoded'
 
     tmpGood = f'{GOOD_DIR}/{TNAME}-{tid}.tmp'
@@ -339,18 +332,18 @@ try: # THREAD
 
             (
                 # FORMAT
-                XFORMAT_A,
-                XFORMAT_B,
+                XFORMAT,
+                XFORMAT_NAME,
                 ORIGINAL_TAGS,
                 # STREAM
-                XCODEC_A,
-                XCODEC_B,
-                XSAMPLE_FMT,
-                XSAMPLE_RATE,
-                XCHANNELS_N,
+                XCODEC,
+                XCODEC_NAME,
+                XBITS_FMT,
+                XHZ,
+                XCHANNELS,
                 XCHANNELS_LAYOUT,
-                XSAMPLE_BITS,
-                XSAMPLE_BITS_RAW,
+                XBITS,
+                XBITS_RAW,
                 XDURATION,
                 XBITRATE,
                 ORIGINAL_TAGS2
@@ -389,7 +382,7 @@ try: # THREAD
             continue
 
         #
-        XPATH, XID, XTIME = original, mhash(12), int(time.time())
+        XPATH, XID, XTIME = original, mhash(), int(time.time())
 
         #
         for t in tags.values():
@@ -410,22 +403,22 @@ try: # THREAD
 
             #
             if 'CONVERSION_TIME' in T:
-                XTIME                     = T.pop('CONVERSION_TIME',           XTIME)
-                XPATH                     = T.pop('ORIGINAL_FILEPATH',         XPATH)
-                XPATH                     = T.pop('ORIGINAL_FILENAME',         XPATH)
-                XPATH                     = T.pop('ORIGINAL_PATH',             XPATH)
-                XCHANNELS_LAYOUT          = T.pop('ORIGINAL_CHANNEL_LAYOUT',   XCHANNELS_LAYOUT)
-                XCHANNELS_N               = T.pop('ORIGINAL_CHANNELS',         XCHANNELS_N)
-                XSAMPLE_BITS              = T.pop('ORIGINAL_BITS',             XSAMPLE_BITS)
-                XSAMPLE_BITS_RAW          = T.pop('ORIGINAL_BITS_RAW',         XSAMPLE_BITS_RAW)
-                XSAMPLE_FMT               = T.pop('ORIGINAL_SAMPLE_FMT',       XSAMPLE_FMT)
-                XSAMPLE_RATE              = T.pop('ORIGINAL_SAMPLE_RATE',      XSAMPLE_RATE)
-                XFORMAT_A                 = T.pop('ORIGINAL_FORMAT_NAME',      XFORMAT_A)
-                XFORMAT_B                 = T.pop('ORIGINAL_FORMAT_NAME_LONG', XFORMAT_B)
-                XCODEC_A                  = T.pop('ORIGINAL_CODEC_NAME',       XCODEC_A)
-                XCODEC_B                  = T.pop('ORIGINAL_CODEC_LONG_NAME',  XCODEC_B)
-                XDURATION                 = T.pop('ORIGINAL_DURATION',         XDURATION)
-                XBITRATE                  = T.pop('ORIGINAL_BITRATE',          XBITRATE)
+                XTIME            = T.pop('CONVERSION_TIME',           XTIME)
+                XPATH            = T.pop('ORIGINAL_FILEPATH',         XPATH)
+                XPATH            = T.pop('ORIGINAL_FILENAME',         XPATH)
+                XPATH            = T.pop('ORIGINAL_PATH',             XPATH)
+                XCHANNELS_LAYOUT = T.pop('ORIGINAL_CHANNEL_LAYOUT',   XCHANNELS_LAYOUT)
+                XCHANNELS        = T.pop('ORIGINAL_CHANNELS',         XCHANNELS)
+                XBITS            = T.pop('ORIGINAL_BITS',             XBITS)
+                XBITS_RAW        = T.pop('ORIGINAL_BITS_RAW',         XBITS_RAW)
+                XBITS_FMT        = T.pop('ORIGINAL_SAMPLE_FMT',       XBITS_FMT)
+                XHZ              = T.pop('ORIGINAL_SAMPLE_RATE',      XHZ)
+                XFORMAT          = T.pop('ORIGINAL_FORMAT_NAME',      XFORMAT)
+                XFORMAT_NAME     = T.pop('ORIGINAL_FORMAT_NAME_LONG', XFORMAT_NAME)
+                XCODEC           = T.pop('ORIGINAL_CODEC_NAME',       XCODEC)
+                XCODEC_NAME      = T.pop('ORIGINAL_CODEC_LONG_NAME',  XCODEC_NAME)
+                XDURATION        = T.pop('ORIGINAL_DURATION',         XDURATION)
+                XBITRATE         = T.pop('ORIGINAL_BITRATE',          XBITRATE)
 
             # ORIGINAL TAGS
             while T:
@@ -445,43 +438,50 @@ try: # THREAD
                     else:
                         tags[t].add(v)
 
-        XCHANNELS_N   = int(XCHANNELS_N)
-        XSAMPLE_RATE  = int(XSAMPLE_RATE)
-        XSAMPLE_FMT = XSAMPLE_FMT.upper()
+        # PARSE/DEFAULTS
+        XCHANNELS   = int(XCHANNELS)
+        XHZ  = int(XHZ)
 
         if XDURATION is None:
             XDURATION = 0
         else:
             XDURATION = float(XDURATION)
 
-        if XSAMPLE_BITS is None:
-            XSAMPLE_BITS = 0
-        else:
-            XSAMPLE_BITS = int(XSAMPLE_BITS)
+        #
+        XBITS_FMT = XBITS_FMT.upper()
 
-        if XSAMPLE_BITS_RAW is None:
-            XSAMPLE_BITS_RAW = 0
+        if XBITS is None:
+            XBITS = 0
         else:
-            XSAMPLE_BITS_RAW = int(XSAMPLE_BITS_RAW)
+            XBITS = int(XBITS)
 
-        if not (XSAMPLE_BITS in (0, 8, 16, 24, 32)):
-            print(f'[{tid}] {original}: ERROR: BAD BITS: {XSAMPLE_BITS}')
+        if XBITS_RAW is None:
+            XBITS_RAW = 0
+        else:
+            XBITS_RAW = int(XBITS_RAW)
+
+        if XCHANNELS_LAYOUT is None:
+            XCHANNELS_LAYOUT = '-'
+
+        # VERIFY
+        if not (XBITS in (0, 8, 16, 24, 32)):
+            print(f'[{tid}] {original}: ERROR: BAD BITS: {XBITS}')
             continue
 
-        if not (XSAMPLE_BITS_RAW in (0, 8, 16, 24, 32)):
-            print(f'[{tid}] {original}: ERROR: BAD BITS RAW: {XSAMPLE_BITS_RAW}')
+        if not (XBITS_RAW in (0, 8, 16, 24, 32)):
+            print(f'[{tid}] {original}: ERROR: BAD BITS RAW: {XBITS_RAW}')
             continue
 
-        if not (XSAMPLE_BITS or XSAMPLE_BITS_RAW):
+        if not (XBITS or XBITS_RAW):
             print(f'[{tid}] {original}: ERROR: NO BITS')
             continue
 
-        if not (1 <= XCHANNELS_N <= 2):
-            print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS_N}')
+        if not (1 <= XCHANNELS <= 2):
+            print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS}')
             continue
 
-        if not (XSAMPLE_FMT in ('S16', 'S32')):
-            print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XSAMPLE_FMT}')
+        if not (XBITS_FMT in ('S16', 'S32')):
+            print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XBITS_FMT}')
             continue
 
         if not (20 <= XDURATION <= 7*24*60*60):
@@ -490,75 +490,78 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: BAD DURATION: {XDURATION}')
             continue
 
-        assert XSAMPLE_FMT
-        assert XCHANNELS_LAYOUT, XCHANNELS_LAYOUT
-        assert XFORMAT_A
-        assert XFORMAT_B
-        assert XCODEC_A
-        assert XCODEC_B
+        if not (44100 <= XHZ <= 192000):
+            print(f'[{tid}] {original}: ERROR: BAD SAMPLE RATE: {XHZ}')
+            continue
 
-        XSAMPLE   = '|'.join(map(str, (XSAMPLE_FMT, XSAMPLE_BITS, XSAMPLE_BITS_RAW))).upper()
-        XFORMAT   = '|'.join((XFORMAT_A, XFORMAT_B)).upper()
-        XCODEC    = '|'.join((XCODEC_A, XCODEC_B)).upper()
-        XCHANNELS = '|'.join(map(str, (XCHANNELS_LAYOUT, XCHANNELS_N))).upper()
+        assert XBITS_FMT
+        assert XFORMAT
+        assert XFORMAT_NAME
+        assert XCODEC
+        assert XCODEC_NAME
 
         #
-        if any(('BINAURAL' in w) for g in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in g):
-            print(f'[{tid}] {original}: WARNING: IS BINAURAL')
-            assert 1 <= XCHANNELS_N  <= 2
-            channels = XCHANNELS_N
-        else:
-            channels = 1
-
-        #
-        for f in (encoded, decoded, tmpGood, tmpBad):
+        for f in (encoded, tmpGood, tmpBad): # , decoded
             try:
                 os.unlink(f)
             except FileNotFoundError:
                 pass
 
-        # DECODE FIXME: error vs quiet?
-        if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-flags', '+bitexact', '-i', original, '-ac', str(channels), '-f', 'wav', '-c:a', 'pcm_f32le', '-bitexact', decoded)):
-            print(f'[{tid}] {original}: ERROR: DECODE FAILED.')
-            continue
+        # FFMPEG/LIBOPUS
+        cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-map_metadata', '-1', '-f', 'opus', '-c:a', 'libopus', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10' ]
 
-        # ENCODE
-        args = [ 'opusenc', decoded, encoded,
-            '--quiet',
-            '--music',
-            '--comp', '10',
-            '--bitrate', '290',
-            # '--raw',
-            # '--raw-endianness', '0',
-            # '--raw-bits', '24',
-            # '--raw-chan', str(channels),
-            # '--raw-rate', str(fpStream['sample_rate']),
-            '--comment',          f'XID={XID}',
-            '--comment',        f'XTIME={XTIME}',
-            '--comment',        f'XPATH={XPATH}',
-            '--comment',      f'XSAMPLE={XSAMPLE}',
-            '--comment',    f'XCHANNELS={XCHANNELS}',
-            '--comment',  f'XSAMPLERATE={XSAMPLE_RATE}',
-            '--comment',      f'XFORMAT={XFORMAT}',
-            '--comment',       f'XCODEC={XCODEC}',
-            '--comment',    f'XDURATION={XDURATION}',
-        ]
+        # cutoff (N.A.)
+        # mapping_family (mapping_family)
 
-        if XBITRATE:
-            args.extend(('--comment', f'XBITRATE={XBITRATE}'))
+        #
+        # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
+        if any(('BINAURAL' in w) for g in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in g):
+            print(f'[{tid}] {original}: WARNING: IS BINAURAL')
+            assert 1 <= XCHANNELS  <= 2
+        else:
+            cmd.extend(('-apply_phase_inv', '0', '-ac', '1'))
+
+        #
+        #cmd.extend(('-b:a', '290k'))
+        cmd.extend(('-b', f'{290*1024}'))
+
+        #
+        for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE'):
+            if v := eval(t):
+                cmd.extend(('-metadata', f'{t}={v}'))
 
         # USE THEM
         for t, v in tags.items():
             if v := '|'.join(sorted(v)):
-                args.extend(('--comment', f'{t}={v}'))
+                cmd.extend(('-metadata', f'{t}={v}'))
+
+        #
+        cmd.append(encoded)
+
+        # EXECUTE THE DECODER
+        # DECODE FIXME: error vs quiet?
+
+        # FFMPEG -> OPUSENC
+        # cmd, argc = [ '/usr/bin/opusenc', decoded, encoded,
+            # '--quiet',
+            # '--music',
+            # '--comp', '10',
+            # '--bitrate', '290',
+            # # '--raw',
+            # # '--raw-endianness', '0',
+            # # '--raw-bits', '24',
+            # # '--raw-chan', str(channels),
+            # # '--raw-rate', str(fpStream['sample_rate']),
+        # ], '--comment'
+        # execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', 'wav', '-c:a', 'pcm_f32le', '-bitexact', '-flags', '+bitexact', '-map_metadata', '-1', decoded))
 
         # EXECUTE THE ENCODER
-        if execute('/usr/bin/opusenc', args):
+        if execute('/usr/bin/ffmpeg', cmd):
             print(f'[{tid}] {original}: ERROR: ENCODE FAILED.')
             continue
 
         # DONT NEED IT ANYMORE
-        os.unlink(decoded)
+        # os.unlink(decoded)
 
         # VERIFY
         # assert channels == int(piped(f'soxi -c {encoded}'))
