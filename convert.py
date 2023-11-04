@@ -4,7 +4,7 @@
 
 #for x in * ; do mv -vn "${x}" $(metaflac --show-md5sum "${x}") ; done
 
-# UNIFY FLAC AS ORIGINAL_HASH
+# UNIFY FLAC AS XHASH
 for x in * ; do
     OHASH=-
     if OHASH=$(spipe $[1*1024*1024] /bin/ffmpeg ffmpeg -y -hide_banner -loglevel quiet -i ${x} -f s24le - | b3sum --num-threads 1 --no-names --raw | base64 | tr / @ | tr + \$) ; then
@@ -35,6 +35,60 @@ import re
 import traceback
 import mmap
 import random
+
+MYTAGS = {
+    # COMMON
+    'ARTIST':      'XARTIST',
+    'ALBUM':       'XALBUM',
+    'TITLE':       'XTITLE',
+    'PERFORMER':   'XPERFORMER',
+    'COMPOSER':    'XCOMPOSER',
+    'COMMENT':     'XCOMMENTS',
+    'COMMENTS':    'XCOMMENTS',
+    'DESCRIPTION': 'XCOMMENTS',
+    # ID3
+    'TAL':  'XALBUM',
+    'TCM':  'XCOMPOSER',
+    'TCO':  'XGENRE',
+    'TCP':  'XOTHERS',
+    'TDA':  'XDATE',
+    'TEN':  'XENCODED',
+    'TLA':  'XLANG',
+    'TOA':  'XARTIST',
+    'TOF':  'XFILENAME',
+    'TP1':  'XARTIST',
+    'TP2':  'XARTIST',
+    'TP3':  'XPEOPLE',
+    'TP4':  'XPEOPLE',
+    'TPB':  'XPEOPLE',
+    'TRD':  'XDATE',
+    'TRK':  'XTRACK',
+    'TS2':  'XARTIST',
+    'TSA':  'XALBUM',
+    'TSC':  'XCOMPOSERS',
+    'TSP':  'XPERFORMER',
+    'TSS':  'XENCODER',
+    'TST':  'XTITLE',
+    'TT1':  'XPEOPLE',
+    'TT2':  'XTITLE',
+    'TT3':  'XTITLE',
+    'TXX':  'XCOMMENTS',
+    'TYE':  'XYEAR',
+    'WAF':  'XFILENAME',
+    'COM':  'XCOMMENTS',
+}
+
+MYTAGS_PARTIAL = (
+    ('ARTIST',      'XARTIST'),
+    ('TITLE',       'XTITLE'),
+    ('ALBUM',       'XALBUM'),
+    ('PEOPLE',      'XPEOPLE'),
+    ('COMPOSER',    'XCOMPOSER'),
+    ('PERFORMER',   'XPERFORMER'),
+    ('REMIXER',     'XREMIXER'),
+    ('COMMENT',     'XCOMMENTS'),
+    ('DESCRIPTION', 'XCOMMENTS'),
+)
 
 #export LC_ALL=en_US.UTF-8
 
@@ -269,20 +323,20 @@ try: # THREAD
 
             (
                 # FORMAT
-                ORIGINAL_FORMAT_NAME,
-                ORIGINAL_FORMAT_NAME_LONG,
+                XFORMAT_A,
+                XFORMAT_B,
                 ORIGINAL_TAGS,
                 # STREAM
-                ORIGINAL_CODEC_NAME,
-                ORIGINAL_CODEC_LONG_NAME,
-                ORIGINAL_SAMPLE_FMT,
-                ORIGINAL_SAMPLE_RATE,
-                ORIGINAL_CHANNELS,
-                ORIGINAL_CHANNEL_LAYOUT,
-                ORIGINAL_BITS,
-                ORIGINAL_BITS_RAW,
-                ORIGINAL_DURATION,
-                ORIGINAL_BITRATE,
+                XCODEC_A,
+                XCODEC_B,
+                XSAMPLE_FMT,
+                XSAMPLE_RATE,
+                XCHANNELS_N,
+                XCHANNELS_LAYOUT,
+                XSAMPLE_BITS,
+                XSAMPLE_BITS_RAW,
+                XDURATION,
+                XBITRATE,
                 ORIGINAL_TAGS2
 
             ) = ( (d[k] if k in d and d[k] != '' else None)
@@ -314,7 +368,7 @@ try: # THREAD
             traceback.print_exc()
             continue
 
-        if ORIGINAL_DURATION is None:
+        if XDURATION is None:
             print(f'[{tid}] {original}: ERROR: DURATION IS NONE!')
             continue
 
@@ -328,67 +382,86 @@ try: # THREAD
             )
         }
 
+        XPATH, XHASH, XTIME = original, None, int(time.time())
+
         #
         if 'CONVERSION_TIME' in tags:
-            # TODAS MENOS ESTAS
-            tags.pop('ORIGINAL_CODEC_TAG_STRING', None)
-            tags.pop('ORIGINAL_CODEC_TAG',        None)
-            tags.pop('ORIGINAL_TIME_BASE',        None)
-            tags.pop('ORIGINAL_DURATION_TS',      None)
+            XTIME                     = tags.pop('CONVERSION_TIME',           XTIME)
+            XHASH                     = tags.pop('ORIGINAL_HASH',             XHASH)
+            XPATH                     = tags.pop('ORIGINAL_FILEPATH',         XPATH)
+            XPATH                     = tags.pop('ORIGINAL_FILENAME',         XPATH)
+            XPATH                     = tags.pop('ORIGINAL_PATH',             XPATH)
+            XCHANNELS_LAYOUT          = tags.pop('ORIGINAL_CHANNEL_LAYOUT',   XCHANNELS_LAYOUT)
+            XCHANNELS_N               = tags.pop('ORIGINAL_CHANNELS',         XCHANNELS_N)
+            XSAMPLE_BITS              = tags.pop('ORIGINAL_BITS',             XSAMPLE_BITS)
+            XSAMPLE_BITS_RAW          = tags.pop('ORIGINAL_BITS_RAW',         XSAMPLE_BITS_RAW)
+            XSAMPLE_FMT               = tags.pop('ORIGINAL_SAMPLE_FMT',       XSAMPLE_FMT)
+            XSAMPLE_RATE              = tags.pop('ORIGINAL_SAMPLE_RATE',      XSAMPLE_RATE)
+            XFORMAT_A                 = tags.pop('ORIGINAL_FORMAT_NAME',      XFORMAT_A)
+            XFORMAT_B                 = tags.pop('ORIGINAL_FORMAT_NAME_LONG', XFORMAT_B)
+            XCODEC_A                  = tags.pop('ORIGINAL_CODEC_NAME',       XCODEC_A)
+            XCODEC_B                  = tags.pop('ORIGINAL_CODEC_LONG_NAME',  XCODEC_B)
+            XDURATION                 = tags.pop('ORIGINAL_DURATION',         XDURATION)
+            XBITRATE                  = tags.pop('ORIGINAL_BITRATE',          XBITRATE)
+
+        XCHANNELS_N   = int(XCHANNELS_N)
+        XSAMPLE_RATE  = int(XSAMPLE_RATE)
+
+        if XDURATION is None:
+            XDURATION = 0
         else:
-            # SOMENTE ESTAS
-            tags = { k: v[:1024] for k, v in tags.items() if re.match(r'^((|ALBUM_)(ARTIST|PERFORMER|TITLE|ALBUM)(|S)(|SORT|_SORT)|TIT[1-9]|YEAR|DATE|YOUTUBE|TRACKNUMBER|TRACKTOTAL|DISCNUMBER|ENCODER|MCDI|TALB|TOAL|TOFN|TOPE|TPE[0-9]|TRCK|REMIXED.BY|REMIXE[DR]|ORIGINALTITLE|DESCRIPTION|COMMENT)$', k) }
+            XDURATION = float(XDURATION)
 
-        CONVERSION_TIME           = tags.pop('CONVERSION_TIME',         int(time.time()))
-        ORIGINAL_HASH             = tags.pop('ORIGINAL_HASH',                   None)
-        ORIGINAL_FILEPATH         = tags.pop('ORIGINAL_FILEPATH',        tags.pop('ORIGINAL_FILENAME', tags.pop('ORIGINAL_PATH', original)))
-        ORIGINAL_BITS             = tags.pop('ORIGINAL_BITS',             ORIGINAL_BITS)
-        ORIGINAL_BITS_RAW         = tags.pop('ORIGINAL_BITS_RAW',         ORIGINAL_BITS_RAW)
-        ORIGINAL_BITRATE          = tags.pop('ORIGINAL_BITRATE',          ORIGINAL_BITRATE)
-        ORIGINAL_CHANNELS         = tags.pop('ORIGINAL_CHANNELS',         ORIGINAL_CHANNELS)
-        ORIGINAL_CHANNEL_LAYOUT   = tags.pop('ORIGINAL_CHANNEL_LAYOUT',   ORIGINAL_CHANNEL_LAYOUT)
-        ORIGINAL_SAMPLE_FMT       = tags.pop('ORIGINAL_SAMPLE_FMT',       ORIGINAL_SAMPLE_FMT)
-        ORIGINAL_SAMPLE_RATE      = tags.pop('ORIGINAL_SAMPLE_RATE',      ORIGINAL_SAMPLE_RATE)
-        ORIGINAL_FORMAT_NAME      = tags.pop('ORIGINAL_FORMAT_NAME',      ORIGINAL_FORMAT_NAME)
-        ORIGINAL_FORMAT_NAME_LONG = tags.pop('ORIGINAL_FORMAT_NAME_LONG', ORIGINAL_FORMAT_NAME_LONG)
-        ORIGINAL_CODEC_NAME       = tags.pop('ORIGINAL_CODEC_NAME',       ORIGINAL_CODEC_NAME)
-        ORIGINAL_CODEC_LONG_NAME  = tags.pop('ORIGINAL_CODEC_LONG_NAME',  ORIGINAL_CODEC_LONG_NAME)
-        ORIGINAL_DURATION         = tags.pop('ORIGINAL_DURATION',         ORIGINAL_DURATION)
+        if XSAMPLE_BITS is None:
+            XSAMPLE_BITS = 0
+        else:
+            XSAMPLE_BITS = int(XSAMPLE_BITS)
 
-        #
-        ORIGINAL_SAMPLE_FMT       = str.upper (ORIGINAL_SAMPLE_FMT)
-        ORIGINAL_FORMAT_NAME      = str.upper (ORIGINAL_FORMAT_NAME)
-        ORIGINAL_FORMAT_NAME_LONG = str.upper (ORIGINAL_FORMAT_NAME_LONG)
-        ORIGINAL_CODEC_NAME       = str.upper (ORIGINAL_CODEC_NAME)
-        ORIGINAL_CODEC_LONG_NAME  = str.upper (ORIGINAL_CODEC_LONG_NAME)
-        ORIGINAL_CHANNELS         = int       (ORIGINAL_CHANNELS)
-        ORIGINAL_SAMPLE_RATE      = int       (ORIGINAL_SAMPLE_RATE)
-        ORIGINAL_DURATION         = float     (ORIGINAL_DURATION)
+        if XSAMPLE_BITS_RAW is None:
+            XSAMPLE_BITS_RAW = 0
+        else:
+            XSAMPLE_BITS_RAW = int(XSAMPLE_BITS_RAW)
 
-        if ORIGINAL_BITS     is not None: ORIGINAL_BITS     = int(ORIGINAL_BITS)
-        if ORIGINAL_BITS_RAW is not None: ORIGINAL_BITS_RAW = int(ORIGINAL_BITS_RAW)
-
-        if not (ORIGINAL_BITS in (None, 0, 8, 16, 24, 32)):
-            print(f'[{tid}] {original}: ERROR: BAD BITS: {ORIGINAL_BITS}')
+        if not (XSAMPLE_BITS in (0, 8, 16, 24, 32)):
+            print(f'[{tid}] {original}: ERROR: BAD BITS: {XSAMPLE_BITS}')
             continue
 
-        if not (ORIGINAL_BITS_RAW in (None, 0, 8, 16, 24, 32)):
-            print(f'[{tid}] {original}: ERROR: BAD BITS RAW: {ORIGINAL_BITS_RAW}')
+        if not (XSAMPLE_BITS_RAW in (0, 8, 16, 24, 32)):
+            print(f'[{tid}] {original}: ERROR: BAD BITS RAW: {XSAMPLE_BITS_RAW}')
             continue
 
-        if not (1 <= ORIGINAL_CHANNELS <= 2):
-            print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {ORIGINAL_CHANNELS}')
+        if not (XSAMPLE_BITS or XSAMPLE_BITS_RAW):
+            print(f'[{tid}] {original}: ERROR: NO BITS')
             continue
 
-        if not (20 <= ORIGINAL_DURATION <= 7*24*60*60):
-            if ORIGINAL_DURATION < 15:
+        if not (1 <= XCHANNELS_N <= 2):
+            print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS_N}')
+            continue
+
+        if not (XSAMPLE_FMT in ('s16', 's32')):
+            print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XSAMPLE_FMT}')
+            continue
+
+        if not (20 <= XDURATION <= 7*24*60*60):
+            if XDURATION < 15:
                 os.unlink(original)
-            print(f'[{tid}] {original}: ERROR: BAD DURATION: {ORIGINAL_DURATION}')
+            print(f'[{tid}] {original}: ERROR: BAD DURATION: {XDURATION}')
             continue
+
+        assert XCHANNELS_LAYOUT
+        assert XFORMAT_A
+        assert XFORMAT_B
+        assert XCODEC_A
+        assert XCODEC_B
+
+        XSAMPLE   = '|'.join(map(str, (XSAMPLE_FMT, XSAMPLE_BITS, XSAMPLE_BITS_RAW))).upper()
+        XFORMAT   = '|'.join((XFORMAT_A, XFORMAT_B)).upper()
+        XCODEC    = '|'.join((XCODEC_A, XCODEC_B)).upper()
+        XCHANNELS = '|'.join(map(str, (XCHANNELS_LAYOUT, XCHANNELS_N))).upper()
 
         #
         if any('BINAURAL' in v.upper() for v in (original, *tags.values())):
-            channels = ORIGINAL_CHANNELS
+            channels = XCHANNELS_N
         else:
             channels = 1
 
@@ -400,16 +473,17 @@ try: # THREAD
                 pass
 
         # DECODE FIXME: error vs quiet?
-        if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', 's24le', decoded)):
+        # if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', 's24le', decoded)):
+        if execute('/usr/bin/ffmpeg', ('ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-i', original, '-ac', str(channels), '-f', 'wav', '-c:a', 'pcm_f32le', decoded)):
             print(f'[{tid}] {original}: ERROR: DECODE FAILED.')
             continue
 
         #
-        if ORIGINAL_HASH is None:
-            with os.popen(f'b3sum --num-threads 1 --no-names --raw {decoded} | base64') as bfd:
+        if XHASH is None:
+            with os.popen(f'ffmpeg -y -hide_banner -loglevel quiet -i {original} -ac 1 -f s24le - | b3sum --num-threads 1 --no-names --raw /proc/self/fd/0 | base64') as bfd:
                 b3sum = bfd.read(1024)
             assert len(b3sum) == 45 and b3sum.endswith('=\n')
-            ORIGINAL_HASH = b3sum.replace('/', '@').replace('+', '$').rstrip('\n').rstrip('=')
+            XHASH = b3sum.replace('/', '@').replace('+', '$').rstrip('\n').rstrip('=')
 
         # ENCODE
         args = [ 'opusenc', decoded, encoded,
@@ -417,38 +491,53 @@ try: # THREAD
             '--music',
             '--comp', '10',
             '--bitrate', '290',
-            '--raw',
-            '--raw-endianness', '0',
-            '--raw-bits', '24',
-            '--raw-chan', str(channels),
-            '--raw-rate', str(fpStream['sample_rate']),
+            # '--raw',
+            # '--raw-endianness', '0',
+            # '--raw-bits', '24',
+            # '--raw-chan', str(channels),
+            # '--raw-rate', str(fpStream['sample_rate']),
+            '--comment',        f'XTIME={XTIME}',
+            '--comment',        f'XHASH={XHASH}',
+            '--comment',        f'XPATH={XPATH}',
+            '--comment',      f'XSAMPLE={XSAMPLE}',
+            '--comment',    f'XCHANNELS={XCHANNELS}',
+            '--comment',  f'XSAMPLERATE={XSAMPLE_RATE}',
+            '--comment',      f'XFORMAT={XFORMAT}',
+            '--comment',       f'XCODEC={XCODEC}',
+            '--comment',    f'XDURATION={XDURATION}',
         ]
 
-        # GENERATED TAGS
-        for name in (
-            'CONVERSION_TIME',
-            'ORIGINAL_HASH',
-            'ORIGINAL_FILEPATH',
-            'ORIGINAL_BITS',
-            'ORIGINAL_BITS_RAW',
-            'ORIGINAL_BITRATE',
-            'ORIGINAL_CHANNELS',
-            'ORIGINAL_CHANNEL_LAYOUT',
-            'ORIGINAL_SAMPLE_FMT',
-            'ORIGINAL_SAMPLE_RATE',
-            'ORIGINAL_FORMAT_NAME',
-            'ORIGINAL_FORMAT_NAME_LONG',
-            'ORIGINAL_CODEC_NAME',
-            'ORIGINAL_CODEC_LONG_NAME',
-            'ORIGINAL_DURATION',
-        ):
-            val = eval(name)
-            if val is not None:
-                args.extend(('--comment', f'{name}={val}'))
+        if XBITRATE:
+            args.extend(('--comment', f'XBITRATE={XBITRATE}'))
+
+        #
+        myTags = { t: set() for t in MYTAGS }
 
         # ORIGINAL TAGS
-        for name, val in tags.items():
-            args.extend(('--comment', f'{name}={val}'))
+        while tags:
+
+            k, v = tags.popitem()
+
+            # EXACT MATCH
+            t = MYTAGS.get(k, None)
+
+            # PARTIAL MATCH
+            if t is None:
+                for old, new in MYTAGS_PARTIAL:
+                    if old in k:
+                        t = new
+                        break
+
+            # TODO: FIXME: SUPORTAR MULTIPLOS
+            if t is not None:
+                if isinstance(v, (list, tuple, set)):
+                    myTags[t].update(v)
+                else:
+                    myTags[t].add(v)
+
+        for k, v in myTags.items():
+            if v := '|'.join(sorted(v)):
+                args.extend(('--comment', f'{k}={v}'))
 
         # EXECUTE THE ENCODER
         if execute('/usr/bin/opusenc', args):
@@ -469,8 +558,8 @@ try: # THREAD
 
         #
         dur = float(piped(f'soxi -D {encoded}'))
-        if not (-1 <= (ORIGINAL_DURATION - dur) <= 1):
-            print(f'[{tid}] {original}: ERROR: DURATION MISMATCH: {ORIGINAL_DURATION} VS {dur}')
+        if not (-1 <= (XDURATION - dur) <= 1):
+            print(f'[{tid}] {original}: ERROR: DURATION MISMATCH: {XDURATION} VS {dur}')
             where, tmp = bad
 
         # NOW COPY FROM TEMP
@@ -531,7 +620,7 @@ try: # THREAD
         os.rename(tmp, new)
 
         # DELETE THE ORIGINAL
-        os.unlink(original)
+        # os.unlink(original)
         os.unlink(encoded)
 
         # COMPARE SIZES
