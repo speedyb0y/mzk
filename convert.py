@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+# ARQUIVOS NA VERSÃO FINAL: @1699130361
+
 import sys
 import os
 import io
@@ -598,7 +600,7 @@ try: # THREAD
         os.rename(tmp, new)
 
         # DELETE THE ORIGINAL
-        # os.unlink(original)
+        os.unlink(original)
         os.unlink(encoded)
 
         # COMPARE SIZES
