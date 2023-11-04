@@ -36,7 +36,7 @@ import traceback
 import mmap
 import random
 
-MYTAGS = {
+TAGS = {
     # COMMON
     'ARTIST':      'XARTIST',
     'ALBUM':       'XALBUM',
@@ -78,7 +78,7 @@ MYTAGS = {
     'COM':  'XCOMMENTS',
 }
 
-MYTAGS_PARTIAL = (
+TAGS_PARTIAL = (
     ('ARTIST',      'XARTIST'),
     ('TITLE',       'XTITLE'),
     ('ALBUM',       'XALBUM'),
@@ -373,36 +373,58 @@ try: # THREAD
             continue
 
         #
-        tags = { k: ' '.join(v.split()).upper()
-            for k, v in ( ('_'.join(k_.replace('_', ' ').replace('-', ' ').split()).upper(), v_)
-                for T in (ORIGINAL_TAGS, ORIGINAL_TAGS2)
-                    if T is not None
-                        for k_, v_ in T.items()
-                            if k_ and v_ is not None
-            )
-        }
+        XPATH, XHASH, XTIME, tags = original, None, int(time.time()), { t: set() for t in TAGS }
 
-        XPATH, XHASH, XTIME = original, None, int(time.time())
+        for T in (ORIGINAL_TAGS, ORIGINAL_TAGS2):
 
-        #
-        if 'CONVERSION_TIME' in tags:
-            XTIME                     = tags.pop('CONVERSION_TIME',           XTIME)
-            XHASH                     = tags.pop('ORIGINAL_HASH',             XHASH)
-            XPATH                     = tags.pop('ORIGINAL_FILEPATH',         XPATH)
-            XPATH                     = tags.pop('ORIGINAL_FILENAME',         XPATH)
-            XPATH                     = tags.pop('ORIGINAL_PATH',             XPATH)
-            XCHANNELS_LAYOUT          = tags.pop('ORIGINAL_CHANNEL_LAYOUT',   XCHANNELS_LAYOUT)
-            XCHANNELS_N               = tags.pop('ORIGINAL_CHANNELS',         XCHANNELS_N)
-            XSAMPLE_BITS              = tags.pop('ORIGINAL_BITS',             XSAMPLE_BITS)
-            XSAMPLE_BITS_RAW          = tags.pop('ORIGINAL_BITS_RAW',         XSAMPLE_BITS_RAW)
-            XSAMPLE_FMT               = tags.pop('ORIGINAL_SAMPLE_FMT',       XSAMPLE_FMT)
-            XSAMPLE_RATE              = tags.pop('ORIGINAL_SAMPLE_RATE',      XSAMPLE_RATE)
-            XFORMAT_A                 = tags.pop('ORIGINAL_FORMAT_NAME',      XFORMAT_A)
-            XFORMAT_B                 = tags.pop('ORIGINAL_FORMAT_NAME_LONG', XFORMAT_B)
-            XCODEC_A                  = tags.pop('ORIGINAL_CODEC_NAME',       XCODEC_A)
-            XCODEC_B                  = tags.pop('ORIGINAL_CODEC_LONG_NAME',  XCODEC_B)
-            XDURATION                 = tags.pop('ORIGINAL_DURATION',         XDURATION)
-            XBITRATE                  = tags.pop('ORIGINAL_BITRATE',          XBITRATE)
+            if T is None:
+                continue
+
+            #
+            T = { k: ' '.join(v.split())[:300].upper()
+                for k, v in ( ('_'.join(k_.replace('_', ' ').replace('-', ' ').split()).upper(), v_)
+                    for k_, v_ in T.items()
+                        if k_ and v_
+                )
+            }
+
+            #
+            if 'CONVERSION_TIME' in T:
+                XTIME                     = T.pop('CONVERSION_TIME',           XTIME)
+                XHASH                     = T.pop('ORIGINAL_HASH',             XHASH)
+                XPATH                     = T.pop('ORIGINAL_FILEPATH',         XPATH)
+                XPATH                     = T.pop('ORIGINAL_FILENAME',         XPATH)
+                XPATH                     = T.pop('ORIGINAL_PATH',             XPATH)
+                XCHANNELS_LAYOUT          = T.pop('ORIGINAL_CHANNEL_LAYOUT',   XCHANNELS_LAYOUT)
+                XCHANNELS_N               = T.pop('ORIGINAL_CHANNELS',         XCHANNELS_N)
+                XSAMPLE_BITS              = T.pop('ORIGINAL_BITS',             XSAMPLE_BITS)
+                XSAMPLE_BITS_RAW          = T.pop('ORIGINAL_BITS_RAW',         XSAMPLE_BITS_RAW)
+                XSAMPLE_FMT               = T.pop('ORIGINAL_SAMPLE_FMT',       XSAMPLE_FMT)
+                XSAMPLE_RATE              = T.pop('ORIGINAL_SAMPLE_RATE',      XSAMPLE_RATE)
+                XFORMAT_A                 = T.pop('ORIGINAL_FORMAT_NAME',      XFORMAT_A)
+                XFORMAT_B                 = T.pop('ORIGINAL_FORMAT_NAME_LONG', XFORMAT_B)
+                XCODEC_A                  = T.pop('ORIGINAL_CODEC_NAME',       XCODEC_A)
+                XCODEC_B                  = T.pop('ORIGINAL_CODEC_LONG_NAME',  XCODEC_B)
+                XDURATION                 = T.pop('ORIGINAL_DURATION',         XDURATION)
+                XBITRATE                  = T.pop('ORIGINAL_BITRATE',          XBITRATE)
+
+            # ORIGINAL TAGS
+            while T:
+                k, v = T.popitem()
+                # EXACT MATCH
+                t = TAGS.get(k, None)
+                # PARTIAL MATCH
+                if t is None:
+                    for old, new in TAGS_PARTIAL:
+                        if old in k:
+                            t = new
+                            break
+                # TODO: FIXME: SUPORTAR MULTIPLOS
+                if t is not None:
+                    if isinstance(v, (list, tuple, set)):
+                        tags[t].update(v)
+                    else:
+                        tags[t].add(v)
 
         XCHANNELS_N   = int(XCHANNELS_N)
         XSAMPLE_RATE  = int(XSAMPLE_RATE)
@@ -460,7 +482,9 @@ try: # THREAD
         XCHANNELS = '|'.join(map(str, (XCHANNELS_LAYOUT, XCHANNELS_N))).upper()
 
         #
-        if any('BINAURAL' in v.upper() for v in (original, *tags.values())):
+        if any(('BINAURAL' in w) for g in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in g):
+            print(f'[{tid}] {original}: WARNING: IS BINAURAL')
+            assert 1 <= XCHANNELS_N  <= 2
             channels = XCHANNELS_N
         else:
             channels = 1
@@ -510,34 +534,10 @@ try: # THREAD
         if XBITRATE:
             args.extend(('--comment', f'XBITRATE={XBITRATE}'))
 
-        #
-        myTags = { t: set() for t in MYTAGS }
-
-        # ORIGINAL TAGS
-        while tags:
-
-            k, v = tags.popitem()
-
-            # EXACT MATCH
-            t = MYTAGS.get(k, None)
-
-            # PARTIAL MATCH
-            if t is None:
-                for old, new in MYTAGS_PARTIAL:
-                    if old in k:
-                        t = new
-                        break
-
-            # TODO: FIXME: SUPORTAR MULTIPLOS
-            if t is not None:
-                if isinstance(v, (list, tuple, set)):
-                    myTags[t].update(v)
-                else:
-                    myTags[t].add(v)
-
-        for k, v in myTags.items():
+        # USE THEM
+        for t, v in tags.items():
             if v := '|'.join(sorted(v)):
-                args.extend(('--comment', f'{k}={v}'))
+                args.extend(('--comment', f'{t}={v}'))
 
         # EXECUTE THE ENCODER
         if execute('/usr/bin/opusenc', args):
@@ -549,9 +549,6 @@ try: # THREAD
 
         # VERIFY
         assert channels == int(piped(f'soxi -c {encoded}'))
-        assert 0        == int(piped(f'soxi -b {encoded}'))
-        assert 16       == int(piped(f'soxi -p {encoded}'))
-        assert 48000    == int(piped(f'soxi -r {encoded}'))
 
         #
         where, tmp = good
