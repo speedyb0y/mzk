@@ -262,8 +262,7 @@ if tid == CPUS:
     # CLEAR ALL FILES
     for tid in range(CPUS):
         for f in (
-            # # # # # # # # # # f'{TMP_DIR}/{TNAME}/{tid}-decoded',
-            f'{TMP_DIR}/{TNAME}/{tid}-encoded',
+            f'{TMP_DIR}/{TNAME}/{tid}',
            f'{GOOD_DIR}/{TNAME}-{tid}.tmp',
             f'{BAD_DIR}/{TNAME}-{tid}.tmp',
         ):
@@ -283,9 +282,7 @@ try: # THREAD
     os.close(pipeOut)
 
     #
-    # # # # # # # # # # decoded = f'{TMP_DIR}/{TNAME}/{tid}-decoded'
-    encoded = f'{TMP_DIR}/{TNAME}/{tid}-encoded'
-
+    encoded = f'{TMP_DIR}/{TNAME}/{tid}'
     tmpGood = f'{GOOD_DIR}/{TNAME}-{tid}.tmp'
     tmpBad  =  f'{BAD_DIR}/{TNAME}-{tid}.tmp'
 
@@ -355,6 +352,9 @@ try: # THREAD
                 )
                 for k in K
             )
+
+            # TODO:
+            canais = int(XCHANNELS)
 
         except BaseException:
             print(f'[{tid}] {original}: ERROR: FFPROBE FAILED')
@@ -460,11 +460,11 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: NO BITS')
             continue
 
-        if not (1 <= XCHANNELS <= 2):
+        if not (1 <= XCHANNELS <= 8):
             print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS}')
             continue
 
-        if not (XBITS_FMT in ('S16', 'S16P', 'S32')):
+        if not (XBITS_FMT in ('S16', 'S16P', 'S32', 'FLT')):
             print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XBITS_FMT}')
             continue
 
@@ -485,29 +485,33 @@ try: # THREAD
         assert XCODEC_NAME
 
         #
-        for f in (encoded, tmpGood, tmpBad): # , decoded
+        for f in (encoded, tmpGood, tmpBad):
             try:
                 os.unlink(f)
             except FileNotFoundError:
                 pass
 
-        # FFMPEG/LIBOPUS
-        cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'quiet', '-bitexact', '-i', original, '-map_metadata', '-1', '-f', 'opus', '-c:a', 'libopus', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10' ]
-
-        # cutoff (N.A.)
-        # mapping_family (mapping_family)
-
         #
+        mono = canais == 1 or not any( ('BINAURAL' in w)
+            for g in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME'])
+                for w in g
+        )
+
+        # FFMPEG/LIBOPUS
+        cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-map_metadata', '-1', '-af', 'aresample=resampler=soxr:precision=28:out_sample_fmt=flt:out_sample_rate=48000', '-ar', '48000', '-sample_fmt', 'flt' ]
+
+        if mono:
+            cmd.extend(('-ac', '1'))
+
+        # OPUS
+        cmd.extend(('-f', 'opus', '-c:a', 'libopus', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
+
         # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
-        if any(('BINAURAL' in w) for g in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in g):
-            print(f'[{tid}] {original}: WARNING: IS BINAURAL')
-            assert 1 <= XCHANNELS  <= 2
-        else:
-            cmd.extend(('-apply_phase_inv', '0', '-ac', '1'))
+        if mono:
+            cmd.extend(('-apply_phase_inv', '0'))
 
         # BIT RATE
         cmd.extend(('-b:a', f'256k'))
-        # cmd.extend(('-b', f'{256*1024}'))
 
         # OUR TAGS
         for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE'):
@@ -526,9 +530,6 @@ try: # THREAD
         if execute('/usr/bin/ffmpeg', cmd):
             print(f'[{tid}] {original}: ERROR: ENCODE FAILED.')
             continue
-
-        # DONT NEED IT ANYMORE
-        # os.unlink(decoded)
 
         # VERIFY
         # assert channels == int(piped(f'soxi -c {encoded}'))
