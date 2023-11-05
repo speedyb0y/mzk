@@ -400,9 +400,12 @@ try: # THREAD
                 if XCODEC == 'OPUS':
                     convert = False
 
+                # FORGET THIS
+                T.pop('XID', None)
+
                 #
-                ( XID,   XTIME,   XPATH ,  XCHANNELS_LAYOUT ,  XBITS ,  XBITS_RAW ,  XBITS_FMT ,  XFORMAT,   XFORMAT_NAME,   XCODEC,   XDURATION,   XCODEC_NAME,   XCHANNELS,   XHZ) = ( T.pop(t, None) for t in
-                ('XID', 'XTIME', 'XPATH', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_RAW', 'XBITS_FMT', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XDURATION', 'XCODEC_NAME', 'XCHANNELS', 'XHZ'))
+                ( XTIME,   XPATH ,  XCHANNELS_LAYOUT ,  XBITS ,  XBITS_RAW ,  XBITS_FMT ,  XFORMAT,   XFORMAT_NAME,   XCODEC,   XDURATION,   XCODEC_NAME,   XCHANNELS,   XHZ) = ( T.pop(t, None) for t in
+                ('XTIME', 'XPATH', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_RAW', 'XBITS_FMT', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XDURATION', 'XCODEC_NAME', 'XCHANNELS', 'XHZ'))
 
                 for t, vals in tags.items():
                     if v := T.pop(t, None):
@@ -504,7 +507,7 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS}')
             continue
 
-        if not (XBITS_FMT in ('S16', 'S16P', 'S32', 'FLT', 'FLTP')):
+        if not (XBITS_FMT in ('S16', 'S16P', 'S32', 'S32P', 'FLT', 'FLTP')):
             print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XBITS_FMT}')
             continue
 
