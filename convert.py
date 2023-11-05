@@ -580,9 +580,6 @@ try: # THREAD
             # where, tmp = bad
 
         # NOW COPY FROM TEMP
-        new = f'{where}/{XID}'
-
-        #
         o = os.open(tmp, os.O_WRONLY | os.O_DIRECT | os.O_CREAT | os.O_EXCL, 0o644)
         i = os.open(encoded, os.O_RDWR | os.O_DIRECT)
 
@@ -634,7 +631,15 @@ try: # THREAD
         os.close(o)
 
         #
-        os.rename(tmp, new)
+        new = f'{where}/{XID}'
+
+        try:
+            os.stat(new)
+        except FileNotFoundError:
+            os.rename(tmp, new)
+        else:
+            print(f'[{tid}] --- NEW ALREADY EXISTS: {new}')
+            continue
 
         # COMPARE SIZES
         if convert:
