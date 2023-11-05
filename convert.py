@@ -195,12 +195,14 @@ assert len(TNAME) >= 4
 CPUS = open('/proc/cpuinfo').read().count('processor\t:')
 assert 1 <= CPUS <= 512
 
+print('CPUS HAS:', CPUS)
+print('CPUS MAX:', CPUS_MAX)
+
 # LIMIT AS REQUESTED
-if CPUS >= CPUS_MAX:
+if CPUS > CPUS_MAX:
     CPUS = CPUS_MAX
 
-print('CPUS HAS:', CPUS)
-print('CPUS USE:', CPUS_MAX)
+print('CPUS USE:', CPUS)
 print('TNAME:', TNAME)
 print('GOOD DIR:', GOOD_DIR)
 print('BAD DIR:', BAD_DIR)
@@ -361,6 +363,12 @@ try: # THREAD
             traceback.print_exc()
             continue
 
+        #
+        XFORMAT      = XFORMAT      .upper()
+        XFORMAT_NAME = XFORMAT_NAME .upper()
+        XCODEC       = XCODEC       .upper()
+        XCODEC_NAME  = XCODEC_NAME  .upper()
+
         if XDURATION is None:
             print(f'[{tid}] {original}: ERROR: DURATION IS NONE!')
             continue
@@ -371,6 +379,8 @@ try: # THREAD
         #
         for t in tags.values():
             t.clear()
+
+        convert = True
 
         for T in (ORIGINAL_TAGS, ORIGINAL_TAGS2):
 
@@ -386,7 +396,18 @@ try: # THREAD
             }
 
             #
-            if 'CONVERSION_TIME' in T:
+            if 'CONVERSION_TIME' in T or 'XID' in T:
+
+                # TEM QUE SER UMA DAS DUAS VERSOES
+                assert (all(map(T.__contains__, ('XID', 'XTIME')))
+                     or all(map(T.__contains__, ('CONVERSION_TIME', 'ORIGINAL_CHANNELS'))))
+
+                #
+                if XCODEC == 'OPUS':
+                    convert = False
+
+                XID              = T.pop('XID',                       XID)
+                XTIME            = T.pop('XTIME',                     XTIME)
                 XTIME            = T.pop('CONVERSION_TIME',           XTIME)
                 XPATH            = T.pop('ORIGINAL_FILEPATH',         XPATH)
                 XPATH            = T.pop('ORIGINAL_FILENAME',         XPATH)
@@ -403,6 +424,15 @@ try: # THREAD
                 XCODEC_NAME      = T.pop('ORIGINAL_CODEC_LONG_NAME',  XCODEC_NAME)
                 XDURATION        = T.pop('ORIGINAL_DURATION',         XDURATION)
                 XBITRATE         = T.pop('ORIGINAL_BITRATE',          XBITRATE)
+
+            assert not 'XID' in T
+            assert not 'XPATH' in T
+            assert not 'XTIME' in T
+            assert not 'ORIGINAL_FILENAME' in t
+            assert not 'ORIGINAL_FILEPATH' in t
+            assert not 'ORIGINAL_PATH' in t
+            assert not 'ORIGINAL_BITS' in T
+            assert not 'ORIGINAL_CHANNELS' in T
 
             # ORIGINAL TAGS
             while T:
@@ -456,15 +486,17 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: BAD BITS RAW: {XBITS_RAW}')
             continue
 
-        if not (XBITS or XBITS_RAW):
-            print(f'[{tid}] {original}: ERROR: NO BITS')
+        if XBITS_FMT == 'FLTP':
+            assert XBITS == 0 and XBITS_RAW == 0, (XBITS_FMT, XBITS, XBITS_RAW)
+        elif not (XBITS or XBITS_RAW):
+            print(f'[{tid}] {original}: ERROR: NO BITS ({XBITS_FMT})')
             continue
 
         if not (1 <= XCHANNELS <= 8):
             print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS}')
             continue
 
-        if not (XBITS_FMT in ('S16', 'S16P', 'S32', 'FLT')):
+        if not (XBITS_FMT in ('S16', 'S16P', 'S32', 'FLT', 'FLTP')):
             print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XBITS_FMT}')
             continue
 
@@ -492,39 +524,32 @@ try: # THREAD
                 pass
 
         #
-        mono = canais == 1 or not any( ('BINAURAL' in w)
-            for g in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME'])
-                for w in g
-        )
+        cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
 
-        # FFMPEG/LIBOPUS
-        cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-map_metadata', '-1', '-af', 'aresample=resampler=soxr:precision=28:out_sample_fmt=flt:out_sample_rate=48000', '-ar', '48000', '-sample_fmt', 'flt' ]
+        if convert:
+            cmd.extend(('-af', 'aresample=resampler=soxr:precision=28:out_sample_fmt=flt:out_sample_rate=48000', '-ar', '48000', '-sample_fmt', 'flt'))
 
-        if mono:
-            cmd.extend(('-ac', '1'))
-
-        # OPUS
-        cmd.extend(('-f', 'opus', '-c:a', 'libopus', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
-
-        # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
-        if mono:
-            cmd.extend(('-apply_phase_inv', '0'))
-
-        # BIT RATE
-        cmd.extend(('-b:a', f'256k'))
-
-        # OUR TAGS
+        # TAGS
         for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE'):
             if v := eval(t):
                 cmd.extend(('-metadata', f'{t}={v}'))
-
-        # ORIGINAL TAGS
         for t, v in tags.items():
             if v := '|'.join(sorted(v)):
                 cmd.extend(('-metadata', f'{t}={v}'))
 
+        # CONVERSION
+        if convert:
+            if mono := (canais == 1 or not any( ('BINAURAL' in w) for W in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in W)):
+                cmd.extend(('-ac', '1'))
+            cmd.extend(('-c:a', 'libopus', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
+            if mono: # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
+                cmd.extend(('-apply_phase_inv', '0'))
+            cmd.extend(('-b:a', '256k'))
+        else:
+            cmd.extend(('-map', '0:a', '-acodec', 'copy'))
+
         # THE OUTPUT FILE
-        cmd.append(encoded)
+        cmd.extend(('-fflags', '+bitexact', '-flags:a', '+bitexact', encoded))
 
         # EXECUTE THE CONVERSOR
         if execute('/usr/bin/ffmpeg', cmd):
@@ -600,12 +625,15 @@ try: # THREAD
         #
         os.rename(tmp, new)
 
+        # COMPARE SIZES
+        if convert:
+            print(f'[{tid}] {(encodedSize*100) // originalSize}% {original} ======> {new}')
+        else:
+            print(f'[{tid}] --- {original} ======> {new}')
+
         # DELETE THE ORIGINAL
         os.unlink(original)
         os.unlink(encoded)
-
-        # COMPARE SIZES
-        print(f'[{tid}] {(encodedSize*100) // originalSize}% {original} ======> {new}')
 
 except KeyboardInterrupt:
     print(f'[{tid}] INTERRUPTED')
