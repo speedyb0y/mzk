@@ -388,26 +388,27 @@ try: # THREAD
                 continue
 
             #
-            T = { k: ' '.join(v.split())[:300].upper()
-                for k, v in ( ('_'.join(k_.replace('_', ' ').replace('-', ' ').split()).upper(), v_)
-                    for k_, v_ in T.items()
-                        if k_ and v_
-                )
+            T = { '_'.join(k[:80].replace('_', ' ').replace('-', ' ').split()).upper().replace('XMZK_TIME', 'CONVERSION_TIME').replace('XMZK_', 'ORIGINAL_'): ' '.join(v.split())[:300].rstrip().upper()
+                for k, v in T.items()
+                    if k and v
             }
 
             #
-            if 'CONVERSION_TIME' in T or 'XID' in T:
-
-                # TEM QUE SER UMA DAS DUAS VERSOES
-                assert (all(map(T.__contains__, ('XID', 'XTIME')))
-                     or all(map(T.__contains__, ('CONVERSION_TIME', 'ORIGINAL_CHANNELS'))))
+            if any(map(T.__contains__, ('CONVERSION_TIME', 'ORIGINAL_BITS', 'XID', 'XPATH', 'XTIME', 'XBITS'))):
 
                 #
                 if XCODEC == 'OPUS':
                     convert = False
 
-                XID              = T.pop('XID',                       XID)
-                XTIME            = T.pop('XTIME',                     XTIME)
+                #
+                ( XID,   XTIME,   XPATH ,  XCHANNELS_LAYOUT ,  XBITS ,  XBITS_RAW ,  XBITS_FMT ,  XFORMAT,   XFORMAT_NAME,   XCODEC,   XDURATION,   XCODEC_NAME,   XCHANNELS,   XHZ) = ( T.pop(t, None) for t in
+                ('XID', 'XTIME', 'XPATH', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_RAW', 'XBITS_FMT', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XDURATION', 'XCODEC_NAME', 'XCHANNELS', 'XHZ'))
+
+                for t, vals in tags.items():
+                    if v := T.pop(t, None):
+                        vals.update(v.split('|'))
+
+                # FORMATO VELHO
                 XTIME            = T.pop('CONVERSION_TIME',           XTIME)
                 XPATH            = T.pop('ORIGINAL_FILEPATH',         XPATH)
                 XPATH            = T.pop('ORIGINAL_FILENAME',         XPATH)
@@ -425,13 +426,19 @@ try: # THREAD
                 XDURATION        = T.pop('ORIGINAL_DURATION',         XDURATION)
                 XBITRATE         = T.pop('ORIGINAL_BITRATE',          XBITRATE)
 
-            assert not 'XID' in T
-            assert not 'XPATH' in T
-            assert not 'XTIME' in T
+                # NOTE: MAY DON'T HAVE XBITS
+                assert all((XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION)), (original,
+                           (XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION))
+
+            #
+            assert not 'XID'               in T
+            assert not 'XPATH'             in T
+            assert not 'XTIME'             in T
+            assert not 'CONVERSION_TIME'   in t
             assert not 'ORIGINAL_FILENAME' in t
             assert not 'ORIGINAL_FILEPATH' in t
-            assert not 'ORIGINAL_PATH' in t
-            assert not 'ORIGINAL_BITS' in T
+            assert not 'ORIGINAL_PATH'     in t
+            assert not 'ORIGINAL_BITS'     in T
             assert not 'ORIGINAL_CHANNELS' in T
 
             # ORIGINAL TAGS
@@ -452,6 +459,7 @@ try: # THREAD
                     else:
                         tags[t].add(v)
 
+        assert not convert, original
         # PARSE/DEFAULTS
         XCHANNELS   = int(XCHANNELS)
         XHZ  = int(XHZ)
