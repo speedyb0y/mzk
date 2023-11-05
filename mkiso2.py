@@ -21,35 +21,23 @@ assert opath.startswith('/')
 # TODO:
 assert 1 <= len(volumeName) <= 30
 
-ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-
-DIRS0 = ['/'.join((a, )) for a in ALPHABET]
-DIRS1 = ['/'.join((a,b)) for a in ALPHABET for b in ALPHABET]
+DIRS0 = sorted('0123456789@ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+DIRS1 = [f'{a}/{b}' for a in DIRS0 for b in DIRS0]
 
 def dhash (i):
     # QUANTOS POR DIRETORIO
     return DIRS1[i // ((len(reais) // len(DIRS1)) + ((len(reais) % len(DIRS1)) != 0))]
 
-def mhash ():
-
-    f  = int.from_bytes(os.read(RANDOMFD, 8), byteorder = 'little', signed=False)
-    f += int(time.monotonic() * 1000000)
-    f += int(random.random() * 0xFFFFFFFFFFFFFFFF)
-    f += f >> 32
-    f %= len(ALPHABET) ** 12
-
-    code = ''
-
-    while f:
-        code += ALPHABET[f % len(ALPHABET)]
-        f //= len(ALPHABET)
-
-    code += ALPHABET[0] * (12 - len(code))
-
+def fhash (i):
+    i %= ((len(reais) // len(DIRS1)) + ((len(reais) % len(DIRS1)) != 0))
+    if i:
+        code = ''
+        while i:
+            code += '0123456789@ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i % 37]
+            i //= 37
+    else:
+        code = '0'
     return code
-
-RANDOMFD = os.open('/dev/urandom', os.O_RDONLY)
-assert 0 <= RANDOMFD <= 10
 
 reais = []
 
@@ -75,11 +63,11 @@ def FIOMAP (f):
     os.close(fd)
     start = int.from_bytes(start, byteorder='little', signed=False)
     block = int.from_bytes(block, byteorder='little', signed=False)
-    return ((st.st_dev >> 8), (st.st_dev) & 0xFF), start * block, st, f
+    return int(st.st_dev), start * block, st, f
 
-# reais = reais[:5]
 reais = sorted(map(FIOMAP, reais))
-reais = [(orig, st, new + orig[orig.rfind('.'):]) for (mm, start, st, orig), new in zip(reais, sorted(mhash() for _ in reais))]
+
+reais = [(orig, st) for _, _, st, orig in reais]
 
 # RESERVE THE MAP
 '''
@@ -116,16 +104,16 @@ for d in (DIRS0, DIRS1):
         os.mkdir(d)
 
 # PUT THE FILES IN THE DIRECTORIES
-for i, (r, st, n) in enumerate(reais):
-    os.symlink(r, f'{dhash(i)}/{n}')
+for i, (r, _) in enumerate(reais):
+    os.symlink(r, f'{dhash(i)}/{fhash(i)}')
 
 # TODO: REMDIR TODOS OS DIRETIORIOS PARE ELIMINAR OS VAZIOS
 for d in (DIRS1, DIRS0):
     for d in d:
         try:
             os.rmdir(d)
-        except:
-            pass
+        except BaseException as e:
+            assert e.errno == 39 # DIRECTORY NOT EMPTY
 
 #############################################################
 # CREATE AND MAP THE OUTPUT FILE (WITH A BIGGER SIZE)
@@ -133,7 +121,7 @@ for d in (DIRS1, DIRS0):
 # TODO: AQUELE PADDING QUE O MKISOFS FAZ
 PADDING = 128*ISO_BLOCK
 
-osize = ((8*1024*1024 + len(DIRS1)*256 + (128 + MSIZE + ISO_BLOCK) + sum((128 + st.st_size + ISO_BLOCK) for r, st, n in reais) + PADDING + DISK_BLOCK - 1) // DISK_BLOCK) * DISK_BLOCK
+osize = ((8*1024*1024 + len(DIRS1)*256 + (128 + MSIZE + ISO_BLOCK) + sum((128 + st.st_size + ISO_BLOCK) for _, st in reais) + PADDING + DISK_BLOCK - 1) // DISK_BLOCK) * DISK_BLOCK
 #osize = -print-size
 
 print('OSIZE:', osize)
@@ -149,7 +137,7 @@ oview = memoryview(obuff)
 
 # ORDEM DOS DADOS NO SISTEMA DE ARQUIVOS
 with open('/tmp/sort', 'w') as fd:
-    fd.write('\n'.join(('./... 1', *(f'./{dhash(i)}/{n} -{1+i}' for i, (r, st, n) in enumerate(reais)), '')))
+    fd.write('\n'.join(('./... 1', *(f'./{dhash(i)}/{fhash(i)} -{1+i}' for i in range(len(reais))), '')))
 
 #os.system('mkisofs -untranslated-filenames -o /mnt/sda2/TESTE.iso.tmp --follow-links -sort /tmp/sort .')
 
@@ -186,9 +174,9 @@ done = end
 
 total = 0
 
-for i, (real, st, new) in enumerate(reais):
+for i, (real, st) in enumerate(reais):
 
-    print(f'{(done*100)//osize}% {st.st_size} {dhash(i)}/{new} {real}')
+    print(f'{(done*100)//osize}% {st.st_size} {dhash(i)}/{fhash(i)} {real}')
 
     # CADA ARQUIVO COMECA EM UM BLOCO
     end_ = ((end + ISO_BLOCK - 1) // ISO_BLOCK) * ISO_BLOCK
@@ -234,8 +222,8 @@ oview.release()
 obuff.close()
 
 # CLEANUP
-for i, (r, st, n) in enumerate(reais):
-    os.unlink(f'{dhash(i)}/{n}')
+for i in range(len(reais)):
+    os.unlink(f'{dhash(i)}/{fhash(i)}')
 
 os.unlink('...')
 
@@ -245,4 +233,3 @@ for d in (DIRS1, DIRS0):
             os.rmdir(d)
         except FileNotFoundError:
             pass
-
