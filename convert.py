@@ -118,13 +118,9 @@ assert not any (tags[t] for _, t in TAGS_PARTIAL)
 
 # WHERE TO SAVE THE CONVERTED FILES
 GOOD_DIR = '/mnt/sda2/CONVERTED'
-BAD_DIR = '/mnt/sda2/BAD'
-
-#
-TMP_DIR = '/tmp'
 
 # HOW MANY PROCESSES TO RUN SIMULTANEOUSLY
-CPUS_MAX = 12
+CPUS_MAX = 16
 
 def version (cmd, start):
     with os.popen(cmd) as fd:
@@ -164,8 +160,6 @@ def scandir (d):
     except NotADirectoryError:
         yield d
 
-ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@'
-
 def mhash ():
 
     f  = int.from_bytes(os.read(RANDOMFD, 8), byteorder = 'little', signed=False)
@@ -177,8 +171,8 @@ def mhash ():
     code = ''
 
     while True:
-        code += ALPHABET[f % len(ALPHABET)]
-        f //= len(ALPHABET)
+        code += '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@'[f % 37]
+        f //= 37
         if f == 0:
             return code
 
@@ -189,7 +183,7 @@ assert 1 <= PID <= 0xFFFFFFFF
 RANDOMFD = os.open('/dev/urandom', os.O_RDONLY)
 assert 0 <= RANDOMFD <= 10
 
-TNAME = mhash()
+TNAME = f'xmzk-conversor-{PID}'
 assert len(TNAME) >= 4
 
 CPUS = open('/proc/cpuinfo').read().count('processor\t:')
@@ -198,6 +192,9 @@ assert 1 <= CPUS <= 512
 print('CPUS HAS:', CPUS)
 print('CPUS MAX:', CPUS_MAX)
 
+CPUS *= 1.5
+CPUS = int(CPUS)
+
 # LIMIT AS REQUESTED
 if CPUS > CPUS_MAX:
     CPUS = CPUS_MAX
@@ -205,10 +202,9 @@ if CPUS > CPUS_MAX:
 print('CPUS USE:', CPUS)
 print('TNAME:', TNAME)
 print('GOOD DIR:', GOOD_DIR)
-print('BAD DIR:', BAD_DIR)
 
 #
-for d in (GOOD_DIR, BAD_DIR):
+for d in (GOOD_DIR, ):
     #
     if not stat.S_ISDIR(os.stat(f'{d}/').st_mode):
         print('ERROR: OUTPUT DIRECTORY IS NOT A DIRECTORY')
@@ -219,12 +215,13 @@ for d in (GOOD_DIR, BAD_DIR):
         exit(1)
 
 #
-if execute('/bin/chrt', ('chrt', '--batch', '-p', '0', str(PID))):
-    print('ERROR: FAILED TO SET PROCESS PRIORITY')
-    exit(1)
+if False:
+    if execute('/bin/chrt', ('chrt', '--batch', '-p', '0', str(PID))):
+        print('ERROR: FAILED TO SET PROCESS PRIORITY')
+        exit(1)
 
 #
-os.mkdir(f'{TMP_DIR}/{TNAME}')
+os.mkdir(f'/tmp/{TNAME}')
 
 #
 pipeIn, pipeOut = os.pipe2(os.O_DIRECT)
@@ -263,17 +260,11 @@ if tid == CPUS:
 
     # CLEAR ALL FILES
     for tid in range(CPUS):
-        for f in (
-            f'{TMP_DIR}/{TNAME}/{tid}',
-           f'{GOOD_DIR}/{TNAME}-{tid}.tmp',
-            f'{BAD_DIR}/{TNAME}-{tid}.tmp',
-        ):
+        for f in (f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'):
             try:
                 os.unlink(f)
             except FileNotFoundError:
                 pass
-
-    os.rmdir(f'{TMP_DIR}/{TNAME}')
 
     exit(0)
 
@@ -284,19 +275,26 @@ try: # THREAD
     os.close(pipeOut)
 
     #
-    encoded = f'{TMP_DIR}/{TNAME}/{tid}'
-    tmpGood = f'{GOOD_DIR}/{TNAME}-{tid}.tmp'
-    tmpBad  =  f'{BAD_DIR}/{TNAME}-{tid}.tmp'
+    tmpRAM, tmpDISK  = f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'
 
-    good = GOOD_DIR, tmpGood
-    bad  = BAD_DIR,  tmpBad
+    i = o = imap = ibuff = None
 
-    while original := os.read(pipeIn, 2048):
-        original = original.decode()
+    while True:
+
+        if ibuff is not None: ibuff.release()
+        if imap  is not None: imap.close()
+        if i     is not None: os.close(i)
+        if o     is not None: os.close(o)
 
         i = o = imap = ibuff = fp = fpStream = cmd = None
 
         XID = XTIME = XPATH = XCHANNELS = XCHANNELS_LAYOUT = XBITS = XBITS_FMT = XBITS_RAW = XHZ = XDURATION = XFORMAT = XFORMAT_NAME = XCODEC = XCODEC_NAME = XBITRATE = None
+
+        original = os.read(pipeIn, 2048).decode()
+
+        if not original:
+            print(f'[{tid}] NO MORE FILES')
+            break
 
         # ONLY IF EXISTS
         try:
@@ -369,12 +367,8 @@ try: # THREAD
         XCODEC       = XCODEC       .upper()
         XCODEC_NAME  = XCODEC_NAME  .upper()
 
-        if XDURATION is None:
-            print(f'[{tid}] {original}: ERROR: DURATION IS NONE!')
-            continue
-
         #
-        XPATH, XID, XTIME = original, mhash(), int(time.time())
+        XPATH, XID, XTIME, XSIZE = original, mhash(), int(time.time()), originalSize
 
         #
         for t in tags.values():
@@ -404,8 +398,8 @@ try: # THREAD
                 T.pop('XID', None)
 
                 #
-                ( XTIME,   XPATH ,  XCHANNELS_LAYOUT ,  XBITS ,  XBITS_RAW ,  XBITS_FMT ,  XFORMAT,   XFORMAT_NAME,   XCODEC,   XDURATION,   XCODEC_NAME,   XCHANNELS,   XHZ) = ( T.pop(t, None) for t in
-                ('XTIME', 'XPATH', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_RAW', 'XBITS_FMT', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XDURATION', 'XCODEC_NAME', 'XCHANNELS', 'XHZ'))
+                ( XTIME,   XPATH ,  XCHANNELS_LAYOUT ,  XBITS ,  XBITS_RAW ,  XBITS_FMT ,  XFORMAT,   XFORMAT_NAME,   XCODEC,   XDURATION,   XCODEC_NAME,   XCHANNELS,   XHZ,   XSIZE) = ( T.pop(t, None) for t in
+                ('XTIME', 'XPATH', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_RAW', 'XBITS_FMT', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XDURATION', 'XCODEC_NAME', 'XCHANNELS', 'XHZ', 'XSIZE'))
 
                 for t, vals in tags.items():
                     if v := T.pop(t, None):
@@ -428,29 +422,62 @@ try: # THREAD
                 XCODEC_NAME      = T.pop('ORIGINAL_CODEC_LONG_NAME',  XCODEC_NAME)
                 XDURATION        = T.pop('ORIGINAL_DURATION',         XDURATION)
                 XBITRATE         = T.pop('ORIGINAL_BITRATE',          XBITRATE)
+                XCHANNELS_LAYOUT = T.pop('XCHANNEL_LAYOUT',           XCHANNELS_LAYOUT)
+                XCODEC_NAME      = T.pop('XCODEC_LONG_NAME',          XCODEC_NAME)
+                XFORMAT_NAME     = T.pop('XFORMAT_NAME_LONG',         XFORMAT_NAME)
+                XBITS_FMT        = T.pop('XSAMPLE_FMT',               XBITS_FMT)
+                XHZ              = T.pop('XSAMPLE_RATE',              XHZ)
+                XHZ              = T.pop('XSAMPLERATE',               XHZ)
+
+                if _ := T.pop('XSAMPLE', None):
+                    XBITS_FMT, XBITS, XBITS_RAW = _.split('|')
+
+                if XBITS_FMT is None:
+                    assert XBITS_RAW is None
+                    XBITS_FMT, XBITS, XBITS_RAW = XBITS.split('|')
+
+                if XFORMAT and XFORMAT_NAME is None:
+                    XFORMAT, XFORMAT_NAME = XFORMAT.split('|', 1)
+
+                if XCODEC and XCODEC_NAME is None:
+                    XCODEC, XCODEC_NAME = XCODEC.split('|', 1)
+
+                if XFORMAT is None:
+                    XFORMAT = ('FLAC',)[('RAW FLAC').index(XFORMAT_NAME)]
+
+                if XCODEC is None:
+                    XCODEC = ('FLAC',)[(('FLAC', 'FLAC (FREE LOSSLESS AUDIO CODEC)'),).index((XFORMAT, XCODEC_NAME))]
+
+                if XCHANNELS and '|' in XCHANNELS and XCHANNELS_LAYOUT is None:
+                    XCHANNELS_LAYOUT, XCHANNELS = XCHANNELS.split('|', 1)
 
                 # NOTE: MAY DON'T HAVE XBITS
-                assert all((XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION)), (original,
-                           (XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION))
+                # NOTE: MAY DON'T HAVE XCHANNELS_LAYOUT
+                assert all((XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ)), (original,
+                           (XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ), T)
+
+
+
 
             #
             assert not 'XID'               in T
             assert not 'XPATH'             in T
             assert not 'XTIME'             in T
-            assert not 'CONVERSION_TIME'   in t
-            assert not 'ORIGINAL_FILENAME' in t
-            assert not 'ORIGINAL_FILEPATH' in t
-            assert not 'ORIGINAL_PATH'     in t
+            assert not 'XBITS'             in T
+            assert not 'CONVERSION_TIME'   in T
+            assert not 'ORIGINAL_FILEPATH' in T
+            assert not 'ORIGINAL_PATH'     in T
             assert not 'ORIGINAL_BITS'     in T
             assert not 'ORIGINAL_CHANNELS' in T
+            assert not 'ORIGINAL_CHANNEL_LAYOUT' in T
+            # assert not 'ORIGINAL_FILENAME' in T      !!! TODO :S
 
             # ORIGINAL TAGS
-            while T:
-                k, v = T.popitem()
-                # EXACT MATCH
-                t = TAGS_EXACTLY.get(k, None)
-                # PARTIAL MATCH
-                if t is None:
+            for k, v in T.items():
+                if 'MUSICBRAINZ' in k:
+                    continue
+                # EXACT MATCH, THEN PARTIAL MATCH
+                if (t := TAGS_EXACTLY.get(k, None)) is None:
                     for old, new in TAGS_PARTIAL:
                         if old in k:
                             t = new
@@ -462,31 +489,19 @@ try: # THREAD
                     else:
                         tags[t].add(v)
 
-        assert not convert, original
         # PARSE/DEFAULTS
-        XCHANNELS   = int(XCHANNELS)
-        XHZ  = int(XHZ)
+        XCHANNELS    = int       (XCHANNELS)
+        XHZ          = int       (XHZ)
+        XBITS_FMT    = str.upper (XBITS_FMT)
+        XCODEC       = str.upper (XCODEC)
+        XCODEC_NAME  = str.upper (XCODEC_NAME)
+        XFORMAT      = str.upper (XFORMAT)
+        XFORMAT_NAME = str.upper (XFORMAT_NAME)
 
-        if XDURATION is None:
-            XDURATION = 0
-        else:
-            XDURATION = float(XDURATION)
-
-        #
-        XBITS_FMT = XBITS_FMT.upper()
-
-        if XBITS is None:
-            XBITS = 0
-        else:
-            XBITS = int(XBITS)
-
-        if XBITS_RAW is None:
-            XBITS_RAW = 0
-        else:
-            XBITS_RAW = int(XBITS_RAW)
-
-        if XCHANNELS_LAYOUT is None:
-            XCHANNELS_LAYOUT = '-'
+        XBITS            = (0   if XBITS            is None else int       (XBITS))
+        XBITS_RAW        = (0   if XBITS_RAW        is None else int       (XBITS_RAW))
+        XCHANNELS_LAYOUT = ('-' if XCHANNELS_LAYOUT is None else str.upper (XCHANNELS_LAYOUT))
+        XDURATION        = (0   if XDURATION        is None else float     (XDURATION))
 
         # VERIFY
         if not (XBITS in (0, 8, 16, 24, 32)):
@@ -497,11 +512,11 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: BAD BITS RAW: {XBITS_RAW}')
             continue
 
-        if XBITS_FMT == 'FLTP':
-            assert XBITS == 0 and XBITS_RAW == 0, (XBITS_FMT, XBITS, XBITS_RAW)
-        elif not (XBITS or XBITS_RAW):
-            print(f'[{tid}] {original}: ERROR: NO BITS ({XBITS_FMT})')
-            continue
+        # WMA, S16P, 0, 0
+        if not (XBITS or XBITS_RAW): # -> 0, 0
+            if XBITS_FMT not in ('FLTP', 'S16P'):
+                print(f'[{tid}] {original}: ERROR: NO BITS ({XBITS_FMT})')
+                continue
 
         if not (1 <= XCHANNELS <= 8):
             print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS}')
@@ -512,23 +527,17 @@ try: # THREAD
             continue
 
         if not (20 <= XDURATION <= 7*24*60*60):
-            if XDURATION < 15:
-                os.unlink(original)
-            print(f'[{tid}] {original}: ERROR: BAD DURATION: {XDURATION}')
-            continue
+            print(f'[{tid}] {original}: WARNING: BAD DURATION: {XDURATION}')
 
-        if not (44100 <= XHZ <= 192000):
+        if not (8000 <= XHZ <= 192000):
             print(f'[{tid}] {original}: ERROR: BAD SAMPLE RATE: {XHZ}')
             continue
 
-        assert XBITS_FMT
-        assert XFORMAT
-        assert XFORMAT_NAME
-        assert XCODEC
-        assert XCODEC_NAME
+        assert XFORMAT and XFORMAT_NAME
+        assert XCODEC  and XCODEC_NAME
 
         #
-        for f in (encoded, tmpGood, tmpBad):
+        for f in (tmpRAM, tmpDISK):
             try:
                 os.unlink(f)
             except FileNotFoundError:
@@ -537,11 +546,8 @@ try: # THREAD
         #
         cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
 
-        if convert:
-            cmd.extend(('-af', 'aresample=resampler=soxr:precision=28:out_sample_fmt=flt:out_sample_rate=48000', '-ar', '48000', '-sample_fmt', 'flt'))
-
         # TAGS
-        for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE'):
+        for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE', 'XSIZE'):
             if v := eval(t):
                 cmd.extend(('-metadata', f'{t}={v}'))
         for t, v in tags.items():
@@ -550,106 +556,92 @@ try: # THREAD
 
         # CONVERSION
         if convert:
+            if XHZ != 48000:
+                cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:out_sample_rate=48000:osr=48000')) # , '-ar', '48000'
+                # cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:osf=flt:out_sample_fmt=flt:out_sample_rate=48000:osr=48000', '-ar', '48000', '-sample_fmt', 'flt'))
+                # cmd.extend(('-af', 'aresample=48000:resampler=soxr:precision=30:osf=flt')) # :dither_method=triangular
             if mono := (canais == 1 or not any( ('BINAURAL' in w) for W in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in W)):
                 cmd.extend(('-ac', '1'))
             cmd.extend(('-c:a', 'libopus', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
             if mono: # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
                 cmd.extend(('-apply_phase_inv', '0'))
-            cmd.extend(('-b:a', '256k'))
+            cmd.extend(('-vbr', 'on', '-b:a', '256k'))
         else:
             cmd.extend(('-map', '0:a', '-acodec', 'copy'))
 
         # THE OUTPUT FILE
-        cmd.extend(('-fflags', '+bitexact', '-flags:a', '+bitexact', encoded))
+        cmd.extend(('-fflags', '+bitexact', '-flags:a', '+bitexact', tmpRAM))
 
         # EXECUTE THE CONVERSOR
         if execute('/usr/bin/ffmpeg', cmd):
             print(f'[{tid}] {original}: ERROR: ENCODE FAILED.')
             continue
 
-        # VERIFY
-        # assert channels == int(piped(f'soxi -c {encoded}'))
-
-        #
-        where, tmp = good
-
-        #
-        # dur = float(piped(f'soxi -D {encoded}'))
-        # if not (-1 <= (XDURATION - dur) <= 1):
-            # print(f'[{tid}] {original}: ERROR: DURATION MISMATCH: {XDURATION} VS {dur}')
-            # where, tmp = bad
-
         # NOW COPY FROM TEMP
-        o = os.open(tmp, os.O_WRONLY | os.O_DIRECT | os.O_CREAT | os.O_EXCL, 0o644)
-        i = os.open(encoded, os.O_RDWR | os.O_DIRECT)
+        o = os.open(tmpDISK, os.O_WRONLY | os.O_DIRECT | os.O_SYNC | os.O_CREAT | os.O_EXCL, 0o644)
+        i = os.open(tmpRAM, os.O_RDWR | os.O_DIRECT)
 
-        encodedSize  = os.fstat(i).st_size
+        # PROTECT AGAINST FILE DESCRIPTORS LEAKING
+        assert 0 <= i <= 10
+        assert 0 <= o <= 10
 
-        if not (65536 <= encodedSize <= 1*1024*1024*1024):
-            print(f'[{tid}] {original}: ERROR: BAD ENCODED SIZE {encodedSize}')
+        newSize = os.fstat(i).st_size
+
+        if not (65536 <= newSize <= 1*1024*1024*1024):
+            print(f'[{tid}] {original}: ERROR: BAD ENCODED SIZE {newSize}')
             continue
 
-        encodedSize_ = ((encodedSize + 4096 - 1) // 4096) * 4096
-        assert encodedSize_ % 4096 == 0
+        newSize_ = ((newSize + 4096 - 1) // 4096) * 4096
 
         # ALIGN THE FILE IN /tmp
-        if encodedSize_ != encodedSize:
+        if newSize_ != newSize:
             try:
-                os.truncate(i, encodedSize_)
+                os.truncate(i, newSize_)
             except BaseException:
-                print(f'[{tid}] {original}: ERROR: FAILED TO TRUNCATE {encoded} AS {encodedSize_} BYTES')
-                os.close(i)
-                os.close(o)
+                print(f'[{tid}] {original}: ERROR: FAILED TO TRUNCATE {tmpRAM} AS {newSize_} BYTES')
                 continue
 
         # ALIGN AND RESERVE IN THE FILESYSTEM
-        if execute('/bin/fallocate', ('fallocate', '--length', str(encodedSize_), tmp)):
-            print(f'[{tid}] {original}: ERROR: FAILED TO FALLOCATE {tmp} AS {encodedSize_} BYTES')
-            os.close(i)
-            os.close(o)
+        if execute('/bin/fallocate', ('fallocate', '--length', str(newSize_), tmpDISK)):
+            print(f'[{tid}] {original}: ERROR: FAILED TO FALLOCATE {tmpDISK} AS {newSize_} BYTES')
             continue
 
-        imap = mmap.mmap(i, encodedSize_, mmap.MAP_SHARED | mmap.MAP_POPULATE, mmap.PROT_READ, 0, 0)
+        imap = mmap.mmap(i, newSize_, mmap.MAP_SHARED | mmap.MAP_POPULATE, mmap.PROT_READ, 0, 0)
 
         ibuff = memoryview(imap)
         offset = 0
 
-        while encodedSize_:
-            c = os.write(o, ibuff[offset:encodedSize_])
-            assert c % 4096 == 0
-            offset += c
-            encodedSize_ -= c
-
-        ibuff.release()
-        imap.close()
-        os.close(i)
+        while newSize_:
+            c = os.write(o, ibuff[offset:newSize_])
+            offset   += c
+            newSize_ -= c
 
         # NOW FIX THE SIZE
         os.fsync(o)
-        os.truncate(o, encodedSize)
+        os.truncate(o, newSize)
         os.fsync(o)
         os.close(o)
+        o = None
 
         #
-        new = f'{where}/{XID}'
+        new = f'{GOOD_DIR}/{XID}'
 
         try:
             os.stat(new)
         except FileNotFoundError:
-            os.rename(tmp, new)
+            os.rename(tmpDISK, new)
         else:
             print(f'[{tid}] --- NEW ALREADY EXISTS: {new}')
             continue
 
         # COMPARE SIZES
         if convert:
-            print(f'[{tid}] {(encodedSize*100) // originalSize}% {original} ======> {new}')
+            print(f'[{tid}] {(newSize*100) // originalSize}% {original} ======> {new}')
         else:
             print(f'[{tid}] --- {original} ======> {new}')
 
         # DELETE THE ORIGINAL
         os.unlink(original)
-        os.unlink(encoded)
 
 except KeyboardInterrupt:
     print(f'[{tid}] INTERRUPTED')

@@ -16,7 +16,7 @@ depends=(gtk3 alsa-lib jansson libdispatch)
 makedepends=(
     libvorbis
     #libmad
-    flac
+    #flac
     #curl
     #imlib2
     #wavpack
@@ -45,7 +45,7 @@ optdepends=(
     #'dbus: for notification daemon support (OSD current song notifications)'
     #'faad2: for AAC plugin'
     #'ffmpeg: for ffmpeg plugin'
-    'flac: for flac plugin'
+    #'flac: for flac plugin'
     #'imlib2: for artwork plugin'
     #'libcddb: for cd audio plugin'
     #'libcdio: for cd audio plugin'
@@ -78,7 +78,7 @@ for O in -f{,R} ; do
         ${SDIR}.tar.zst
 done
 
-git clone --depth 1 https://github.com/speedyb0y/deadbeef.git deadbeef-${pkgver}
+git clone --depth 1 https://github.com/speedyb0y/deadbeef.git -b xmzk deadbeef-${pkgver}
 
 rm -f  ${SDIR}/.git || :
 rm -fR ${SDIR}/.git
@@ -110,8 +110,8 @@ CONFIGURE_OPTS=(
     # Libretro resampler plugin
     --disable-{dca,sid,gme,vtx,tta,psf,sc68}
     --disable-cdda{,-paranoia}
-    --disable-{alac,aac,mp3,wma,wavpack,musepack,ffap,shn}
-     --enable-{flac,vorbis,opus}
+    --disable-{alac,aac,mp3,wma,wavpack,musepack,ffap,shn,flac}
+     --enable-{vorbis,opus}
     --disable-gtk2 # GTK2 user interface
      --enable-gtk3 # GTK3 user interface
      --enable-vfs-mzk #zip

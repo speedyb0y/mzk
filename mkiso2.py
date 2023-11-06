@@ -139,9 +139,8 @@ oview = memoryview(obuff)
 with open('/tmp/sort', 'w') as fd:
     fd.write('\n'.join(('./... 1', *(f'./{dhash(i)}/{fhash(i)} -{1+i}' for i in range(len(reais))), '')))
 
-#os.system('mkisofs -untranslated-filenames -o /mnt/sda2/TESTE.iso.tmp --follow-links -sort /tmp/sort .')
-
-pipe = os.popen(f'mkisofs -quiet -input-charset ASCII -follow-links -posix-L -V {volumeName} -p speedyb0y -untranslated-filenames -o - --follow-links -sort /tmp/sort .')
+# -hidden glob
+pipe = os.popen(f'mkisofs -quiet -input-charset ASCII -hide ... -J -hide-joliet ... -follow-links -posix-L -V {volumeName} -p speedyb0y -untranslated-filenames -o - -sort /tmp/sort .')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
 
 end = 0
