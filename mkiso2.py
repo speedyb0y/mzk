@@ -140,7 +140,7 @@ with open('/tmp/sort', 'w') as fd:
     fd.write('\n'.join(('./... 1', *(f'./{dhash(i)}/{fhash(i)} -{1+i}' for i in range(len(reais))), '')))
 
 # -hidden glob
-pipe = os.popen(f'mkisofs -quiet -input-charset ASCII -hide ... -J -hide-joliet ... -follow-links -posix-L -V {volumeName} -p speedyb0y -untranslated-filenames -o - -sort /tmp/sort .')
+pipe = os.popen(f'mkisofs -quiet -iso-level 4 -input-charset ASCII -hide ... -rock -J -hide-joliet ... -follow-links -posix-L -V {volumeName} -p speedyb0y -untranslated-filenames -o - -sort /tmp/sort .')
 pipeIO = io.FileIO(pipe.fileno(), 'r', closefd=False)
 
 end = 0

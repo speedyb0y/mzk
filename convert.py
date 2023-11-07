@@ -221,7 +221,7 @@ if False:
         exit(1)
 
 #
-os.mkdir(f'/tmp/{TNAME}')
+assert 0 <= os.open(f'/tmp/{TNAME}', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
 
 #
 pipeIn, pipeOut = os.pipe2(os.O_DIRECT)
@@ -265,6 +265,8 @@ if tid == CPUS:
                 os.unlink(f)
             except FileNotFoundError:
                 pass
+
+    os.unlink(f'/tmp/{TNAME}')
 
     exit(0)
 
@@ -391,10 +393,9 @@ try: # THREAD
             if any(map(T.__contains__, ('CONVERSION_TIME', 'ORIGINAL_BITS', 'XID', 'XPATH', 'XTIME', 'XBITS'))):
 
                 #
-                if XCODEC == 'OPUS':
-                    convert = False
+                convert = XCODEC in ('FLAC',)
 
-                # FORGET THIS
+                # FORGET THIS      TODO: SE ESTIVER OK ENTAO MANTEM ELE
                 T.pop('XID', None)
 
                 #
@@ -456,9 +457,6 @@ try: # THREAD
                 assert all((XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ)), (original,
                            (XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ), T)
 
-
-
-
             #
             assert not 'XID'               in T
             assert not 'XPATH'             in T
@@ -471,6 +469,8 @@ try: # THREAD
             assert not 'ORIGINAL_CHANNELS' in T
             assert not 'ORIGINAL_CHANNEL_LAYOUT' in T
             # assert not 'ORIGINAL_FILENAME' in T      !!! TODO :S
+
+            assert XID
 
             # ORIGINAL TAGS
             for k, v in T.items():
@@ -556,13 +556,14 @@ try: # THREAD
 
         # CONVERSION
         if convert:
-            if XHZ != 48000:
-                cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:out_sample_rate=48000:osr=48000')) # , '-ar', '48000'
+            if XHZ != 48000 and False:
+                cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:out_sample_rate=48000:osr=48000:dither_method=none')) # , '-ar', '48000'
+                #@ffmpeg.exe -report -hide_banner -v 32 -stats -y -i "%filename%" -vn -af aresample=resampler=soxr:osr=48000:cutoff=0.990:dither_method=none,aformat=sample_fmts=s32:channel_layouts=0x60f -strict -2 -c:a dca -b:a 1536k -f wav "%~n1_dts.wav"
                 # cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:osf=flt:out_sample_fmt=flt:out_sample_rate=48000:osr=48000', '-ar', '48000', '-sample_fmt', 'flt'))
                 # cmd.extend(('-af', 'aresample=48000:resampler=soxr:precision=30:osf=flt')) # :dither_method=triangular
             if mono := (canais == 1 or not any( ('BINAURAL' in w) for W in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in W)):
                 cmd.extend(('-ac', '1'))
-            cmd.extend(('-c:a', 'libopus', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
+            cmd.extend(('-c:a', 'libopus', '-qscale:a', '0', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
             if mono: # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
                 cmd.extend(('-apply_phase_inv', '0'))
             cmd.extend(('-vbr', 'on', '-b:a', '256k'))
