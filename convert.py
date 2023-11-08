@@ -546,6 +546,12 @@ try: # THREAD
             except FileNotFoundError:
                 pass
 
+        if XYOUTUBE is None:
+            if re.match(r'^.*youtube.*\[[0-9a-z_-]{5,}\][.](m4a|opus|ogg|mp4|webm)$', original.lower()):
+                XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\].*$', original)
+            elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,}\][.](m4a|opus|ogg|mp4|webm)$', XPATH.lower()):
+                XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\].*$', XPATH)
+
         #
         cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
 
@@ -557,20 +563,12 @@ try: # THREAD
             if v := '|'.join(sorted(v)):
                 cmd.extend(('-metadata', f'{t}={v}'))
 
-        if XYOUTUBE is None:
-            if re.match(r'^.*youtube.*\[[0-9a-z_-]{5,}\][.](m4a|opus|ogg|mp4|webm)$', original.lower()):
-                XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\].*$', original)
-            elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,}\][.](m4a|opus|ogg|mp4|webm)$', XPATH.lower()):
-                XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\].*$', XPATH)
-
         if XYOUTUBE is not None:
-            print(XYOUTUBE)
-            assert False, (original, XYOUTUBE, cmd)
-            assert (XFORMAT, XCODEC) == ('OPUS', 'OPUS'), (XFORMAT, XCODEC)
+            assert (XFORMAT, XCODEC) in (('OGG', 'OPUS'),) (XFORMAT, XCODEC)
             convert = False
 
         # CONVERSION
-        if convert and XYOUTUBE is None:
+        if convert:
             if XHZ != 48000 and False:
                 cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:out_sample_rate=48000:osr=48000:dither_method=none')) # , '-ar', '48000'
                 #@ffmpeg.exe -report -hide_banner -v 32 -stats -y -i "%filename%" -vn -af aresample=resampler=soxr:osr=48000:cutoff=0.990:dither_method=none,aformat=sample_fmts=s32:channel_layouts=0x60f -strict -2 -c:a dca -b:a 1536k -f wav "%~n1_dts.wav"
