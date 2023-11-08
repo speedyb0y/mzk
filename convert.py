@@ -558,7 +558,7 @@ try: # THREAD
 
         if XYOUTUBE is not None:
             print(XYOUTUBE)
-            assert False (original, XYOUTUBE, cmd)
+            assert False, (original, XYOUTUBE, cmd)
             assert (XFORMAT, XCODEC) == ('OPUS', 'OPUS'), (XFORMAT, XCODEC)
             convert = False
 
