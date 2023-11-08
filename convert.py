@@ -564,7 +564,7 @@ try: # THREAD
                 cmd.extend(('-metadata', f'{t}={v}'))
 
         if XYOUTUBE is not None:
-            assert (XFORMAT, XCODEC) in (('OGG', 'OPUS'),) (XFORMAT, XCODEC)
+            assert (XFORMAT, XCODEC) in (('OGG', 'OPUS'),), (XFORMAT, XCODEC)
             convert = False
 
         # CONVERSION
