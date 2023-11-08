@@ -547,10 +547,10 @@ try: # THREAD
                 pass
 
         if XYOUTUBE is not None:
-            if 'youtu.be' in YOUTUBE:
-                YOUTUBE = YOUTUBE.rsplit('/', 1)[1][0].split('?')[0]
-            elif '/watch?v=' in YOUTUBE:
-                YOUTUBE = YOUTUBE.split('=')[1]
+            if 'youtu.be' in XYOUTUBE:
+                XYOUTUBE = XYOUTUBE.rsplit('/', 1)[1][0].split('?')[0]
+            elif '/watch?v=' in XYOUTUBE:
+                XYOUTUBE = XYOUTUBE.split('=')[1]
             # https://www.youtube.com/watch?v=4LHYCXaI_CI
             # https://youtu.be/4LHYCXaI_CI?
         elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,16}\][.](m4a|opus|ogg|mp4|webm)$', original.lower()):
@@ -558,7 +558,7 @@ try: # THREAD
         elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,16}\][.](m4a|opus|ogg|mp4|webm)$', XPATH.lower()):
             XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\][.].*$', XPATH)
 
-        assert YOUTUBE is None or re.match(r'^[0-9A-Za-z_-]{5,16}$', YOUTUBE)
+        assert XYOUTUBE is None or re.match(r'^[0-9A-Za-z_-]{5,16}$', XYOUTUBE)
 
         #
         cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
