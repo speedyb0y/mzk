@@ -34,6 +34,7 @@ tags = { t: set()
         'XTITLE',
         'XTRACK',
         'XYEAR',
+        'XYOUTUBE',
     )
 }
 
@@ -62,6 +63,7 @@ TAGS_EXACTLY = {
     'ENCODER':           'XENCODER',
     'ENCODER_OPTIONS':   'XENCODER',
     'ENCODED_BY':        'XENCODED_BY',
+    'YOUTUBE': 'XYOUTUBE',
     # ID3
     'TAL':  'XALBUM',
     'TCM':  'XCOMPOSER',
@@ -554,8 +556,14 @@ try: # THREAD
             if v := '|'.join(sorted(v)):
                 cmd.extend(('-metadata', f'{t}={v}'))
 
+        if XYOUTUBE is not None:
+            print(XYOUTUBE)
+            assert False (original, XYOUTUBE, cmd)
+            assert (XFORMAT, XCODEC) == ('OPUS', 'OPUS'), (XFORMAT, XCODEC)
+            convert = False
+
         # CONVERSION
-        if convert:
+        if convert and XYOUTUBE is None:
             if XHZ != 48000 and False:
                 cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:out_sample_rate=48000:osr=48000:dither_method=none')) # , '-ar', '48000'
                 #@ffmpeg.exe -report -hide_banner -v 32 -stats -y -i "%filename%" -vn -af aresample=resampler=soxr:osr=48000:cutoff=0.990:dither_method=none,aformat=sample_fmts=s32:channel_layouts=0x60f -strict -2 -c:a dca -b:a 1536k -f wav "%~n1_dts.wav"
