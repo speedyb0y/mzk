@@ -572,9 +572,9 @@ try: # THREAD
                 cmd.extend(('-metadata', f'{t}={v}'))
 
         if XYOUTUBE is not None:
-            assert (XFORMAT, XCODEC) in (('OGG', 'OPUS'),), (XFORMAT, XCODEC)
+            assert (XFORMAT, XCODEC) in (('OGG', 'OPUS'), ('MOV,MP4,M4A,3GP,3G2,MJ2', 'AAC')), (XFORMAT, XCODEC)
             convert = False
-
+ 
         # CONVERSION
         if convert:
             if XHZ != 48000 and False:
