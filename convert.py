@@ -1,10 +1,7 @@
 #!/usr/bin/python
 
-# ARQUIVOS NA VERSÃO FINAL: @1699130361
-
 import sys
 import os
-import io
 import stat
 import time
 import json
@@ -129,6 +126,12 @@ def version (cmd, start):
         ret = fd.read(65536).startswith(start)
     return ret
 
+def background (executable, args, env=os.environ):
+    if pid := os.fork():
+        return pid
+    os.execve(executable, args, env)
+    exit(1)
+
 # EXECUTE A COMMAND, WAIT FOR ALL IT'S CHILDS, AND RETURN ANY FAILURE FROM ANY OF THEM
 def execute (executable, args, env=os.environ):
     if os.fork() == 0:
@@ -203,7 +206,7 @@ if CPUS > CPUS_MAX:
 
 print('CPUS USE:', CPUS)
 print('TNAME:', TNAME)
-print('GOOD DIR:', GOOD_DIR)
+print('DIR:', GOOD_DIR)
 
 #
 for d in (GOOD_DIR, ):
@@ -225,102 +228,32 @@ if False:
 #
 assert 0 <= os.open(f'/tmp/{TNAME}', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
 
+def allfiles(fs):
+
+    for f in fs:
+        for f in scandir(f):
+            if re.match('^.*[.](mp3|aac|flac|wav|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
+                yield f
+
 #
-pipeIn, pipeOut = os.pipe2(os.O_DIRECT)
+tmpDISK  = f'{GOOD_DIR}/{TNAME}.tmp'
 
-# TODO: CPU AFFINITY
-cpu0 = 0
+i = o = imap = ibuff = None
 
-for tid in range(CPUS + 1):
-    if tid != CPUS: # THE LAST ONE WONT LAUNCH ANYTHING
-        if os.fork() == 0:
-            break # THE CHILD WILL STOP HERE
+# THREAD
+def job (tid):
 
-if tid == CPUS:
-
-    # WE ARE THE WRITER
-    os.close(pipeIn)
-
-    try:
-        for f in sys.argv[1:]:
-            for f in scandir(f):
-                if re.match('^.*[.](mp3|aac|flac|wav|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
-                    os.write(pipeOut, f.encode())
-    except KeyboardInterrupt:
-        pass
-
-    os.close(pipeOut)
-
-    # WAIT ALL CHILDS TO FINISH
-    while True:
-        try:
-            os.wait()
-        except ChildProcessError:
-            break
-        except KeyboardInterrupt:
-            pass
-
-    # CLEAR ALL FILES
-    for tid in range(CPUS):
-        for f in (f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'):
-            try:
-                os.unlink(f)
-            except FileNotFoundError:
-                pass
-
-    os.unlink(f'/tmp/{TNAME}')
-
-    exit(0)
-
-try: # THREAD
     print(f'[{tid}] LAUNCHED')
 
-    # WE ARE THE READER
-    os.close(pipeOut)
-
-    #
-    tmpRAM, tmpDISK  = f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'
-
-    i = o = imap = ibuff = None
+    tmpRAM = f'/tmp/{TNAME}-{tid}'
 
     while True:
-
-        if ibuff is not None: ibuff.release()
-        if imap  is not None: imap.close()
-        if i     is not None: os.close(i)
-        if o     is not None: os.close(o)
-
-        i = o = imap = ibuff = fp = fpStream = cmd = None
 
         XID = XTIME = XPATH = XCHANNELS = XCHANNELS_LAYOUT = XBITS = XBITS_FMT = XBITS_RAW = XHZ = None
         XDURATION = XFORMAT = XFORMAT_NAME = XCODEC = XCODEC_NAME = XBITRATE = XYOUTUBE = None
 
-        original = os.read(pipeIn, 2048).decode()
-
-        if not original:
-            print(f'[{tid}] NO MORE FILES')
-            break
-
-        # ONLY IF EXISTS
-        try:
-            st = os.stat(original)
-        except FileNotFoundError:
-            print(f'[{tid}] {original}: SKIPPED (NOT FOUND)')
-            continue
-
-        # ONLY FILES
-        if not stat.S_ISREG(st.st_mode):
-            print(f'[{tid}] {original}: SKIPPED (NOT FILE)')
-            continue
-
-        originalSize = st.st_size
-
-        # NOT SMALL FILES
-        if originalSize < 128*1024:
-            print(f'[{tid}] {original}: SKIPPED (TOO SMALL)')
-            if 1 <= originalSize:
-                os.unlink(original)
-            continue
+        # MANDA O MAIN COPIAR E PEGA O PROXIMO
+        original, originalSize = yield None
 
         #
         try:
@@ -331,9 +264,9 @@ try: # THREAD
             fpStream, = (s for s in fp['streams'] if s['codec_type'] == 'audio') # NOTE: ONLY SUPPORT FILES WITH 1 AUDIO STREAM
 
             ( # FORMAT
-                XFORMAT, XFORMAT_NAME, ORIGINAL_TAGS,
+                XFORMAT, XFORMAT_NAME, TAGS_FORMAT,
                 # STREAM
-                XCODEC, XCODEC_NAME, XBITS_FMT, XHZ, XCHANNELS, XCHANNELS_LAYOUT, XBITS, XBITS_RAW, XDURATION, XBITRATE, ORIGINAL_TAGS2
+                XCODEC, XCODEC_NAME, XBITS_FMT, XHZ, XCHANNELS, XCHANNELS_LAYOUT, XBITS, XBITS_RAW, XDURATION, XBITRATE, TAGS_STREAM
             ) = ( (d[k] if k in d and d[k] != '' else None)
                 for d, K in (
                     ( fp['format'], (
@@ -358,13 +291,13 @@ try: # THREAD
                 for k in K
             )
 
-            # TODO:
-            canais = int(XCHANNELS)
-
         except BaseException:
             print(f'[{tid}] {original}: ERROR: FFPROBE FAILED')
             traceback.print_exc()
             continue
+
+        # TODO:
+        canais = int(XCHANNELS)
 
         #
         XFORMAT      = XFORMAT      .upper()
@@ -381,13 +314,13 @@ try: # THREAD
 
         convert = True
 
-        for T in (ORIGINAL_TAGS, ORIGINAL_TAGS2):
+        for T in (TAGS_FORMAT, TAGS_STREAM):
 
             if T is None:
                 continue
 
             #
-            T = { '_'.join(k[:80].replace('_', ' ').replace('-', ' ').split()).upper().replace('XMZK_TIME', 'CONVERSION_TIME').replace('XMZK_', 'ORIGINAL_'): ' '.join(v.split())[:300].rstrip().upper()
+            T = { '_'.join(k[:80].replace('_', ' ').replace('-', ' ').split()).upper().replace('XMZK_TIME', 'CONVERSION_TIME').replace('XMZK_', 'ORIGINAL_'): ' '.join(v.split())[:350].rstrip().upper()
                 for k, v in T.items()
                     if k and v
             }
@@ -458,7 +391,7 @@ try: # THREAD
                 # NOTE: MAY DON'T HAVE XBITS
                 # NOTE: MAY DON'T HAVE XCHANNELS_LAYOUT
                 assert all((XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ)), (original,
-                           (XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ), T)
+                            (XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ), T)
 
             #
             assert not 'XID'               in T
@@ -576,7 +509,7 @@ try: # THREAD
                 ('OGG', 'OPUS'): False,
                 ('MOV,MP4,M4A,3GP,3G2,MJ2', 'AAC'): True,
             } [(XFORMAT, XCODEC)]
- 
+
         # CONVERSION
         if convert:
             if XHZ != 48000 and False:
@@ -601,78 +534,141 @@ try: # THREAD
             print(f'[{tid}] {original}: ERROR: ENCODE FAILED.')
             continue
 
-        # NOW COPY FROM TEMP
-        o = os.open(tmpDISK, os.O_WRONLY | os.O_DIRECT | os.O_SYNC | os.O_CREAT | os.O_EXCL, 0o644)
-        i = os.open(tmpRAM, os.O_RDWR | os.O_DIRECT)
 
-        # PROTECT AGAINST FILE DESCRIPTORS LEAKING
-        assert 0 <= i <= 10
-        assert 0 <= o <= 10
+        pid = background('ffprobe')
+        
+        res = yield pid
 
-        newSize = os.fstat(i).st_size
+        pid = background('ffmpeg')
 
-        if not (65536 <= newSize <= 1*1024*1024*1024):
-            print(f'[{tid}] {original}: ERROR: BAD ENCODED SIZE {newSize}')
-            continue
+        res = yield pid
 
-        newSize_ = ((newSize + 4096 - 1) // 4096) * 4096
+jobs = tuple(map(job, range(CPUS)))
 
-        # ALIGN THE FILE IN /tmp
-        if newSize_ != newSize:
-            try:
-                os.truncate(i, newSize_)
-            except BaseException:
-                print(f'[{tid}] {original}: ERROR: FAILED TO TRUNCATE {tmpRAM} AS {newSize_} BYTES')
-                continue
+for original in allfiles(sys.argv[1:]):
 
-        # ALIGN AND RESERVE IN THE FILESYSTEM
-        if execute('/bin/fallocate', ('fallocate', '--length', str(newSize_), tmpDISK)):
-            print(f'[{tid}] {original}: ERROR: FAILED TO FALLOCATE {tmpDISK} AS {newSize_} BYTES')
-            continue
+    if ibuff is not None: ibuff.release()
+    if imap  is not None: imap.close()
+    if i     is not None: os.close(i)
+    if o     is not None: os.close(o)
 
-        imap = mmap.mmap(i, newSize_, mmap.MAP_SHARED | mmap.MAP_POPULATE, mmap.PROT_READ, 0, 0)
+    i = o = imap = ibuff = fp = fpStream = cmd = None
 
-        ibuff = memoryview(imap)
-        offset = 0
+    # ONLY IF EXISTS
+    try:
+        st = os.stat(original)
+    except FileNotFoundError:
+        print(f'[{tid}] {original}: SKIPPED (NOT FOUND)')
+        continue
 
-        while newSize_:
-            c = os.write(o, ibuff[offset:newSize_])
-            offset   += c
-            newSize_ -= c
+    # ONLY FILES
+    if not stat.S_ISREG(st.st_mode):
+        print(f'[{tid}] {original}: SKIPPED (NOT FILE)')
+        continue
 
-        # NOW FIX THE SIZE
-        os.fsync(o)
-        os.truncate(o, newSize)
-        os.fsync(o)
-        os.close(o)
-        o = None
+    originalSize = st.st_size
 
-        #
-        new = f'{GOOD_DIR}/{XID}'
+    # NOT SMALL FILES
+    if originalSize < 128*1024:
+        print(f'[{tid}] {original}: SKIPPED (TOO SMALL)')
+        if 1 <= originalSize:
+            os.unlink(original)
+        continue
 
+    pid = wait()
+
+    pids[pid] = job
+    
+    pid = next(pids[pid], result)
+
+    for job in jobs:
+        _ = next(job)
+
+    # NOW COPY FROM TEMP
+    o = os.open(tmpDISK, os.O_WRONLY | os.O_DIRECT | os.O_SYNC | os.O_CREAT | os.O_EXCL, 0o644)
+    i = os.open(tmpRAM, os.O_RDWR | os.O_DIRECT)
+
+    # PROTECT AGAINST FILE DESCRIPTORS LEAKING
+    assert 0 <= i <= 10
+    assert 0 <= o <= 10
+
+    newSize = os.fstat(i).st_size
+
+    if not (65536 <= newSize <= 1*1024*1024*1024):
+        print(f'[{tid}] {original}: ERROR: BAD ENCODED SIZE {newSize}')
+        continue
+
+    newSize_ = ((newSize + 4096 - 1) // 4096) * 4096
+
+    # ALIGN THE FILE IN /tmp
+    if newSize_ != newSize:
         try:
-            os.stat(new)
-        except FileNotFoundError:
-            os.rename(tmpDISK, new)
-        else:
-            print(f'[{tid}] --- NEW ALREADY EXISTS: {new}')
+            os.truncate(i, newSize_)
+        except BaseException:
+            print(f'[{tid}] {original}: ERROR: FAILED TO TRUNCATE {tmpRAM} AS {newSize_} BYTES')
             continue
 
-        # COMPARE SIZES
-        if convert:
-            print(f'[{tid}] {(newSize*100) // originalSize}% {original} ======> {new}')
-        else:
-            print(f'[{tid}] --- {original} ======> {new}')
+    # ALIGN AND RESERVE IN THE FILESYSTEM
+    if execute('/bin/fallocate', ('fallocate', '--length', str(newSize_), tmpDISK)):
+        print(f'[{tid}] {original}: ERROR: FAILED TO FALLOCATE {tmpDISK} AS {newSize_} BYTES')
+        continue
 
-        # DELETE THE ORIGINAL
-        os.unlink(original)
+    imap = mmap.mmap(i, newSize_, mmap.MAP_SHARED | mmap.MAP_POPULATE, mmap.PROT_READ, 0, 0)
 
-except KeyboardInterrupt:
-    print(f'[{tid}] INTERRUPTED')
-except BaseException:
-    print(f'[{tid}] ---------------- EXCEPTION -----------')
-    traceback.print_exc()
+    ibuff = memoryview(imap)
+    offset = 0
+
+    while newSize_:
+        c = os.write(o, ibuff[offset:newSize_])
+        offset   += c
+        newSize_ -= c
+
+    # NOW FIX THE SIZE
+    os.fsync(o)
+    os.truncate(o, newSize)
+    os.fsync(o)
+    os.close(o)
+    o = None
+
+    #
+    new = f'{GOOD_DIR}/{XID}'
+
+    try:
+        os.stat(new)
+    except FileNotFoundError:
+        os.rename(tmpDISK, new)
+    else:
+        print(f'[{tid}] --- NEW ALREADY EXISTS: {new}')
+        continue
+
+    # COMPARE SIZES
+    if convert:
+        print(f'[{tid}] {(newSize*100) // originalSize}% {original} ======> {new}')
+    else:
+        print(f'[{tid}] --- {original} ======> {new}')
+
+    # DELETE THE ORIGINAL
+    os.unlink(original)
 
 print(f'[{tid}] EXITING')
+
+# WAIT ALL CHILDS TO FINISH
+while True:
+    try:
+        os.wait()
+    except ChildProcessError:
+        break
+    except KeyboardInterrupt:
+        pass
+
+# CLEAR ALL FILES
+for tid in range(CPUS):
+    for f in (f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'):
+        try:
+            os.unlink(f)
+        except FileNotFoundError:
+            pass
+
+os.unlink(f'/tmp/{TNAME}')
 
 exit(0)
