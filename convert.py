@@ -550,12 +550,18 @@ try: # THREAD
         cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
 
         # TAGS
-        for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE', 'XSIZE'):
+        for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE', 'XSIZE', 'XYOUTUBE'):
             if v := eval(t):
                 cmd.extend(('-metadata', f'{t}={v}'))
         for t, v in tags.items():
             if v := '|'.join(sorted(v)):
                 cmd.extend(('-metadata', f'{t}={v}'))
+
+        if XYOUTUBE is None:
+            if re.match(r'^.*youtube.*\[[0-9a-z_-]{5,}\][.](m4a|opus|ogg|mp4|webm)$', original.lower()):
+                XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\].*$', original)
+            elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,}\][.](m4a|opus|ogg|mp4|webm)$', XPATH.lower()):
+                XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\].*$', XPATH)
 
         if XYOUTUBE is not None:
             print(XYOUTUBE)
