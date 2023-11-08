@@ -551,8 +551,8 @@ try: # THREAD
                 YOUTUBE = YOUTUBE.rsplit('/', 1)[1][0].split('?')[0]
             elif '/watch?v=' in YOUTUBE:
                 YOUTUBE = YOUTUBE.split('=')[1]
-            assert  https://www.youtube.com/watch[?]v=(4LHYCXaI_CI)
-            https://youtu.be/4LHYCXaI_CI?
+            # https://www.youtube.com/watch?v=4LHYCXaI_CI
+            # https://youtu.be/4LHYCXaI_CI?
         elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,16}\][.](m4a|opus|ogg|mp4|webm)$', original.lower()):
             XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\][.].*$', original)
         elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,16}\][.](m4a|opus|ogg|mp4|webm)$', XPATH.lower()):
