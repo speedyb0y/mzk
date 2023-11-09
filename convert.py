@@ -233,6 +233,13 @@ if tid == CPUS:
         for f in sys.argv[1:]:
             for f in scandir(f):
                 if re.match('^.*[.](mp3|aac|flac|wav|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
+                    i = os.open(f, os.O_RDONLY)
+                    s = o.stat(st.st_size)
+                    if s < 65536:
+                        continue
+                    m = mmap.mmap(i, s, mmap.MAP_SHARED | mmap.MAP_POPULATE, mmap.PROT_READ, 0, 0)
+                    m = m.release()
+                    os.close(i)
                     os.write(pipeOut, f.encode())
     except KeyboardInterrupt:
         pass
