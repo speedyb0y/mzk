@@ -182,11 +182,6 @@ RANDOMFD = os.open('/dev/urandom', os.O_RDONLY)
 
 TNAME = f'xmzk-conversor-{PID}'
 
-assert 1 <= PID <= 0xFFFFFFFF
-assert 0 <= RANDOMFD <= 10
-assert 5 <= len(TNAME)
-assert 1 <= CPUS <= 512
-
 CPUS = int(1.5 * open('/proc/cpuinfo').read().count('processor\t:'))
 
 # LIMIT AS REQUESTED
@@ -197,6 +192,11 @@ print('CPUS MAX:', CPUS_MAX)
 print('CPUS USE:', CPUS)
 print('TNAME:', TNAME)
 print('DIRECTORY:', GOOD_DIR)
+
+assert 1 <= PID <= 0xFFFFFFFF
+assert 0 <= RANDOMFD <= 10
+assert 5 <= len(TNAME)
+assert 1 <= CPUS <= 512
 
 if not stat.S_ISDIR(os.stat(f'{GOOD_DIR}/').st_mode):
     print('ERROR: OUTPUT DIRECTORY IS NOT A DIRECTORY')
