@@ -2,6 +2,7 @@
 
 import sys
 import os
+import io
 import stat
 import time
 import json
@@ -126,12 +127,6 @@ def version (cmd, start):
         ret = fd.read(65536).startswith(start)
     return ret
 
-def background (executable, args, env=os.environ):
-    if pid := os.fork():
-        return pid
-    os.execve(executable, args, env)
-    exit(1)
-
 # EXECUTE A COMMAND, WAIT FOR ALL IT'S CHILDS, AND RETURN ANY FAILURE FROM ANY OF THEM
 def execute (executable, args, env=os.environ):
     if os.fork() == 0:
@@ -182,42 +177,34 @@ def mhash ():
             return code
 
 PID = os.getpid()
-assert 1 <= PID <= 0xFFFFFFFF
 
-#
 RANDOMFD = os.open('/dev/urandom', os.O_RDONLY)
-assert 0 <= RANDOMFD <= 10
 
 TNAME = f'xmzk-conversor-{PID}'
-assert len(TNAME) >= 4
 
-CPUS = open('/proc/cpuinfo').read().count('processor\t:')
+assert 1 <= PID <= 0xFFFFFFFF
+assert 0 <= RANDOMFD <= 10
+assert 5 <= len(TNAME)
 assert 1 <= CPUS <= 512
 
-print('CPUS HAS:', CPUS)
-print('CPUS MAX:', CPUS_MAX)
-
-CPUS *= 1.5
-CPUS = int(CPUS)
+CPUS = int(1.5 * open('/proc/cpuinfo').read().count('processor\t:'))
 
 # LIMIT AS REQUESTED
 if CPUS > CPUS_MAX:
     CPUS = CPUS_MAX
 
+print('CPUS MAX:', CPUS_MAX)
 print('CPUS USE:', CPUS)
 print('TNAME:', TNAME)
-print('DIR:', GOOD_DIR)
+print('DIRECTORY:', GOOD_DIR)
 
-#
-for d in (GOOD_DIR, ):
-    #
-    if not stat.S_ISDIR(os.stat(f'{d}/').st_mode):
-        print('ERROR: OUTPUT DIRECTORY IS NOT A DIRECTORY')
-        exit(1)
-    #
-    if os.getcwd().strip('/').startswith(d.strip('/')):
-        print('ERROR: CANNOT WORK ON OUTPUT DIR')
-        exit(1)
+if not stat.S_ISDIR(os.stat(f'{GOOD_DIR}/').st_mode):
+    print('ERROR: OUTPUT DIRECTORY IS NOT A DIRECTORY')
+    exit(1)
+
+if os.getcwd().strip('/').startswith(GOOD_DIR.strip('/')):
+    print('ERROR: CANNOT WORK ON OUTPUT DIR')
+    exit(1)
 
 #
 if False:
@@ -228,324 +215,65 @@ if False:
 #
 assert 0 <= os.open(f'/tmp/{TNAME}', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
 
-def allfiles(fs):
-
-    for f in fs:
-        for f in scandir(f):
-            if re.match('^.*[.](mp3|aac|flac|wav|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
-                yield f
-
 #
-tmpDISK  = f'{GOOD_DIR}/{TNAME}.tmp'
+pipeIn, pipeOut = os.pipe2(os.O_DIRECT)
 
-i = o = imap = ibuff = None
+# TODO: CPU AFFINITY
+cpu0 = 0
 
-# THREAD
-def job (tid):
+for tid in range(CPUS + 1):
+    if tid != CPUS: # THE LAST ONE WONT LAUNCH ANYTHING
+        if os.fork() == 0:
+            break # THE CHILD WILL STOP HERE
 
-    print(f'[{tid}] LAUNCHED')
+if tid == CPUS:
 
-    tmpRAM = f'/tmp/{TNAME}-{tid}'
+    # WE ARE THE WRITER
+    os.close(pipeIn)
 
+    try:
+        for f in sys.argv[1:]:
+            for f in scandir(f):
+                if re.match('^.*[.](mp3|aac|flac|wav|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
+                    os.write(pipeOut, f.encode())
+    except KeyboardInterrupt:
+        pass
+
+    os.close(pipeOut)
+
+    # WAIT ALL CHILDS TO FINISH
     while True:
-
-        XID = XTIME = XPATH = XCHANNELS = XCHANNELS_LAYOUT = XBITS = XBITS_FMT = XBITS_RAW = XHZ = None
-        XDURATION = XFORMAT = XFORMAT_NAME = XCODEC = XCODEC_NAME = XBITRATE = XYOUTUBE = None
-
-        # MANDA O MAIN COPIAR E PEGA O PROXIMO
-        original, originalSize = yield None
-
-        #
         try:
-            with open(original, 'rb') as xxx:
-                with os.popen(f'ffprobe -v quiet -print_format json -show_format -show_streams -- /proc/{os.getpid()}/fd/{xxx.fileno()}') as fd:
-                    fp = json.loads(fd.read(1*1024*1024))
+            os.wait()
+        except ChildProcessError:
+            break
+        except KeyboardInterrupt:
+            pass
 
-            fpStream, = (s for s in fp['streams'] if s['codec_type'] == 'audio') # NOTE: ONLY SUPPORT FILES WITH 1 AUDIO STREAM
-
-            ( # FORMAT
-                XFORMAT, XFORMAT_NAME, TAGS_FORMAT,
-                # STREAM
-                XCODEC, XCODEC_NAME, XBITS_FMT, XHZ, XCHANNELS, XCHANNELS_LAYOUT, XBITS, XBITS_RAW, XDURATION, XBITRATE, TAGS_STREAM
-            ) = ( (d[k] if k in d and d[k] != '' else None)
-                for d, K in (
-                    ( fp['format'], (
-                        'format_name',
-                        'format_long_name',
-                        'tags',
-                    )),
-                    ( fpStream, (
-                        'codec_name',
-                        'codec_long_name',
-                        'sample_fmt',
-                        'sample_rate',
-                        'channels',
-                        'channel_layout',
-                        'bits_per_sample',
-                        'bits_per_raw_sample',
-                        'duration',
-                        'bit_rate',
-                        'tags',
-                    )),
-                )
-                for k in K
-            )
-
-        except BaseException:
-            print(f'[{tid}] {original}: ERROR: FFPROBE FAILED')
-            traceback.print_exc()
-            continue
-
-        # TODO:
-        canais = int(XCHANNELS)
-
-        #
-        XFORMAT      = XFORMAT      .upper()
-        XFORMAT_NAME = XFORMAT_NAME .upper()
-        XCODEC       = XCODEC       .upper()
-        XCODEC_NAME  = XCODEC_NAME  .upper()
-
-        #
-        XPATH, XID, XTIME, XSIZE = original, mhash(), int(time.time()), originalSize
-
-        #
-        for t in tags.values():
-            t.clear()
-
-        convert = True
-
-        for T in (TAGS_FORMAT, TAGS_STREAM):
-
-            if T is None:
-                continue
-
-            #
-            T = { '_'.join(k[:80].replace('_', ' ').replace('-', ' ').split()).upper().replace('XMZK_TIME', 'CONVERSION_TIME').replace('XMZK_', 'ORIGINAL_'): ' '.join(v.split())[:350].rstrip().upper()
-                for k, v in T.items()
-                    if k and v
-            }
-
-            #
-            if any(map(T.__contains__, ('CONVERSION_TIME', 'ORIGINAL_BITS', 'XID', 'XPATH', 'XTIME', 'XBITS'))):
-
-                #
-                convert = XCODEC in ('FLAC',)
-
-                # FORGET THIS      TODO: SE ESTIVER OK ENTAO MANTEM ELE
-                T.pop('XID', None)
-
-                #
-                ( XTIME,   XPATH ,  XCHANNELS_LAYOUT ,  XBITS ,  XBITS_RAW ,  XBITS_FMT ,  XFORMAT,   XFORMAT_NAME,   XCODEC,   XDURATION,   XCODEC_NAME,   XCHANNELS,   XHZ,   XSIZE,   XYOUTUBE) = ( T.pop(t, None) for t in
-                ('XTIME', 'XPATH', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_RAW', 'XBITS_FMT', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XDURATION', 'XCODEC_NAME', 'XCHANNELS', 'XHZ', 'XSIZE', 'XYOUTUBE'))
-
-                for t, vals in tags.items():
-                    if v := T.pop(t, None):
-                        vals.update(v.split('|'))
-
-                # FORMATO VELHO
-                XTIME            = T.pop('CONVERSION_TIME',           XTIME)
-                XPATH            = T.pop('ORIGINAL_FILEPATH',         XPATH)
-                XPATH            = T.pop('ORIGINAL_FILENAME',         XPATH)
-                XPATH            = T.pop('ORIGINAL_PATH',             XPATH)
-                XCHANNELS_LAYOUT = T.pop('ORIGINAL_CHANNEL_LAYOUT',   XCHANNELS_LAYOUT)
-                XCHANNELS        = T.pop('ORIGINAL_CHANNELS',         XCHANNELS)
-                XBITS            = T.pop('ORIGINAL_BITS',             XBITS)
-                XBITS_RAW        = T.pop('ORIGINAL_BITS_RAW',         XBITS_RAW)
-                XBITS_FMT        = T.pop('ORIGINAL_SAMPLE_FMT',       XBITS_FMT)
-                XHZ              = T.pop('ORIGINAL_SAMPLE_RATE',      XHZ)
-                XFORMAT          = T.pop('ORIGINAL_FORMAT_NAME',      XFORMAT)
-                XFORMAT_NAME     = T.pop('ORIGINAL_FORMAT_NAME_LONG', XFORMAT_NAME)
-                XCODEC           = T.pop('ORIGINAL_CODEC_NAME',       XCODEC)
-                XCODEC_NAME      = T.pop('ORIGINAL_CODEC_LONG_NAME',  XCODEC_NAME)
-                XDURATION        = T.pop('ORIGINAL_DURATION',         XDURATION)
-                XBITRATE         = T.pop('ORIGINAL_BITRATE',          XBITRATE)
-                XCHANNELS_LAYOUT = T.pop('XCHANNEL_LAYOUT',           XCHANNELS_LAYOUT)
-                XCODEC_NAME      = T.pop('XCODEC_LONG_NAME',          XCODEC_NAME)
-                XFORMAT_NAME     = T.pop('XFORMAT_NAME_LONG',         XFORMAT_NAME)
-                XBITS_FMT        = T.pop('XSAMPLE_FMT',               XBITS_FMT)
-                XHZ              = T.pop('XSAMPLE_RATE',              XHZ)
-                XHZ              = T.pop('XSAMPLERATE',               XHZ)
-
-                if _ := T.pop('XSAMPLE', None):
-                    XBITS_FMT, XBITS, XBITS_RAW = _.split('|')
-
-                if XBITS_FMT is None:
-                    assert XBITS_RAW is None
-                    XBITS_FMT, XBITS, XBITS_RAW = XBITS.split('|')
-
-                if XFORMAT and XFORMAT_NAME is None:
-                    XFORMAT, XFORMAT_NAME = XFORMAT.split('|', 1)
-
-                if XCODEC and XCODEC_NAME is None:
-                    XCODEC, XCODEC_NAME = XCODEC.split('|', 1)
-
-                if XFORMAT is None:
-                    XFORMAT = ('FLAC',)[('RAW FLAC').index(XFORMAT_NAME)]
-
-                if XCODEC is None:
-                    XCODEC = ('FLAC',)[(('FLAC', 'FLAC (FREE LOSSLESS AUDIO CODEC)'),).index((XFORMAT, XCODEC_NAME))]
-
-                if XCHANNELS and '|' in XCHANNELS and XCHANNELS_LAYOUT is None:
-                    XCHANNELS_LAYOUT, XCHANNELS = XCHANNELS.split('|', 1)
-
-                # NOTE: MAY DON'T HAVE XBITS
-                # NOTE: MAY DON'T HAVE XCHANNELS_LAYOUT
-                assert all((XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ)), (original,
-                            (XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ), T)
-
-            #
-            assert not 'XID'               in T
-            assert not 'XPATH'             in T
-            assert not 'XTIME'             in T
-            assert not 'XBITS'             in T
-            assert not 'CONVERSION_TIME'   in T
-            assert not 'ORIGINAL_FILEPATH' in T
-            assert not 'ORIGINAL_PATH'     in T
-            assert not 'ORIGINAL_BITS'     in T
-            assert not 'ORIGINAL_CHANNELS' in T
-            assert not 'ORIGINAL_CHANNEL_LAYOUT' in T
-            # assert not 'ORIGINAL_FILENAME' in T      !!! TODO :S
-
-            assert XID
-
-            # ORIGINAL TAGS
-            for k, v in T.items():
-                if 'MUSICBRAINZ' in k:
-                    continue
-                # EXACT MATCH, THEN PARTIAL MATCH
-                if (t := TAGS_EXACTLY.get(k, None)) is None:
-                    for old, new in TAGS_PARTIAL:
-                        if old in k:
-                            t = new
-                            break
-                # TODO: FIXME: SUPORTAR MULTIPLOS
-                if t is not None:
-                    if isinstance(v, (list, tuple, set)):
-                        tags[t].update(v)
-                    else:
-                        tags[t].add(v)
-
-        # PARSE/DEFAULTS
-        XCHANNELS    = int       (XCHANNELS)
-        XHZ          = int       (XHZ)
-        XBITS_FMT    = str.upper (XBITS_FMT)
-        XCODEC       = str.upper (XCODEC)
-        XCODEC_NAME  = str.upper (XCODEC_NAME)
-        XFORMAT      = str.upper (XFORMAT)
-        XFORMAT_NAME = str.upper (XFORMAT_NAME)
-
-        XBITS            = (0   if XBITS            is None else int       (XBITS))
-        XBITS_RAW        = (0   if XBITS_RAW        is None else int       (XBITS_RAW))
-        XCHANNELS_LAYOUT = ('-' if XCHANNELS_LAYOUT is None else str.upper (XCHANNELS_LAYOUT))
-        XDURATION        = (0   if XDURATION        is None else float     (XDURATION))
-
-        # VERIFY
-        if not (XBITS in (0, 8, 16, 24, 32)):
-            print(f'[{tid}] {original}: ERROR: BAD BITS: {XBITS}')
-            continue
-
-        if not (XBITS_RAW in (0, 8, 16, 24, 32)):
-            print(f'[{tid}] {original}: ERROR: BAD BITS RAW: {XBITS_RAW}')
-            continue
-
-        # WMA, S16P, 0, 0
-        if not (XBITS or XBITS_RAW): # -> 0, 0
-            if XBITS_FMT not in ('FLTP', 'S16P'):
-                print(f'[{tid}] {original}: ERROR: NO BITS ({XBITS_FMT})')
-                continue
-
-        if not (1 <= XCHANNELS <= 8):
-            print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS}')
-            continue
-
-        if not (XBITS_FMT in ('S16', 'S16P', 'S32', 'S32P', 'FLT', 'FLTP')):
-            print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XBITS_FMT}')
-            continue
-
-        if not (20 <= XDURATION <= 7*24*60*60):
-            print(f'[{tid}] {original}: WARNING: BAD DURATION: {XDURATION}')
-
-        if not (8000 <= XHZ <= 192000):
-            print(f'[{tid}] {original}: ERROR: BAD SAMPLE RATE: {XHZ}')
-            continue
-
-        assert XFORMAT and XFORMAT_NAME
-        assert XCODEC  and XCODEC_NAME
-
-        #
-        for f in (tmpRAM, tmpDISK):
+    # CLEAR ALL FILES
+    for tid in range(CPUS):
+        for f in (f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'):
             try:
                 os.unlink(f)
             except FileNotFoundError:
                 pass
 
-        if XYOUTUBE is not None:
-            if 'youtu.be' in XYOUTUBE:
-                XYOUTUBE = XYOUTUBE.rsplit('/', 1)[1][0].split('?')[0]
-            elif '/watch?v=' in XYOUTUBE:
-                XYOUTUBE = XYOUTUBE.split('=')[1]
-            # https://www.youtube.com/watch?v=4LHYCXaI_CI
-            # https://youtu.be/4LHYCXaI_CI?
-        elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,16}\][.](m4a|opus|ogg|mp4|webm)$', original.lower()):
-            XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\][.].*$', original)
-        elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,16}\][.](m4a|opus|ogg|mp4|webm)$', XPATH.lower()):
-            XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\][.].*$', XPATH)
+    os.unlink(f'/tmp/{TNAME}')
 
-        assert XYOUTUBE is None or re.match(r'^[0-9A-Za-z_-]{5,16}$', XYOUTUBE)
+    exit(0)
 
-        #
-        cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
+# THREAD
+print(f'[{tid}] LAUNCHED')
 
-        # TAGS
-        for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE', 'XSIZE', 'XYOUTUBE'):
-            if v := eval(t):
-                cmd.extend(('-metadata', f'{t}={v}'))
-        for t, v in tags.items():
-            if v := '|'.join(sorted(v)):
-                cmd.extend(('-metadata', f'{t}={v}'))
+# WE ARE THE READER
+os.close(pipeOut)
 
-        if XYOUTUBE is not None:
-            convert = {
-                ('OGG', 'OPUS'): False,
-                ('MOV,MP4,M4A,3GP,3G2,MJ2', 'AAC'): True,
-            } [(XFORMAT, XCODEC)]
+#
+tmpRAM, tmpDISK  = f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'
 
-        # CONVERSION
-        if convert:
-            if XHZ != 48000 and False:
-                cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:out_sample_rate=48000:osr=48000:dither_method=none')) # , '-ar', '48000'
-                #@ffmpeg.exe -report -hide_banner -v 32 -stats -y -i "%filename%" -vn -af aresample=resampler=soxr:osr=48000:cutoff=0.990:dither_method=none,aformat=sample_fmts=s32:channel_layouts=0x60f -strict -2 -c:a dca -b:a 1536k -f wav "%~n1_dts.wav"
-                # cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:osf=flt:out_sample_fmt=flt:out_sample_rate=48000:osr=48000', '-ar', '48000', '-sample_fmt', 'flt'))
-                # cmd.extend(('-af', 'aresample=48000:resampler=soxr:precision=30:osf=flt')) # :dither_method=triangular
-            if mono := (canais == 1 or not any( ('BINAURAL' in w) for W in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in W)):
-                cmd.extend(('-ac', '1'))
-            cmd.extend(('-c:a', 'libopus', '-qscale:a', '0', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
-            if mono: # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
-                cmd.extend(('-apply_phase_inv', '0'))
-            cmd.extend(('-vbr', 'on', '-b:a', '256k'))
-        else:
-            cmd.extend(('-map', '0:a', '-acodec', 'copy'))
+i = o = imap = ibuff = None
 
-        # THE OUTPUT FILE
-        cmd.extend(('-fflags', '+bitexact', '-flags:a', '+bitexact', tmpRAM))
-
-        # EXECUTE THE CONVERSOR
-        if execute('/usr/bin/ffmpeg', cmd):
-            print(f'[{tid}] {original}: ERROR: ENCODE FAILED.')
-            continue
-
-
-        pid = background('ffprobe')
-        
-        res = yield pid
-
-        pid = background('ffmpeg')
-
-        res = yield pid
-
-jobs = tuple(map(job, range(CPUS)))
-
-for original in allfiles(sys.argv[1:]):
+while True:
 
     if ibuff is not None: ibuff.release()
     if imap  is not None: imap.close()
@@ -553,6 +281,15 @@ for original in allfiles(sys.argv[1:]):
     if o     is not None: os.close(o)
 
     i = o = imap = ibuff = fp = fpStream = cmd = None
+
+    XID = XTIME = XPATH = XCHANNELS = XCHANNELS_LAYOUT = XBITS = XBITS_FMT = XBITS_RAW = XHZ = None
+    XDURATION = XFORMAT = XFORMAT_NAME = XCODEC = XCODEC_NAME = XBITRATE = XYOUTUBE = None
+
+    original = os.read(pipeIn, 2048).decode()
+
+    if not original:
+        print(f'[{tid}] NO MORE FILES')
+        break
 
     # ONLY IF EXISTS
     try:
@@ -575,14 +312,283 @@ for original in allfiles(sys.argv[1:]):
             os.unlink(original)
         continue
 
-    pid = wait()
+    #
+    try:
+        with open(original, 'rb') as xxx:
+            with os.popen(f'ffprobe -v quiet -print_format json -show_format -show_streams -- /proc/{os.getpid()}/fd/{xxx.fileno()}') as fd:
+                fp = json.loads(fd.read(1*1024*1024))
 
-    pids[pid] = job
-    
-    pid = next(pids[pid], result)
+        fpStream, = (s for s in fp['streams'] if s['codec_type'] == 'audio') # NOTE: ONLY SUPPORT FILES WITH 1 AUDIO STREAM
 
-    for job in jobs:
-        _ = next(job)
+        ( # FORMAT
+            XFORMAT, XFORMAT_NAME, ORIGINAL_TAGS,
+            # STREAM
+            XCODEC, XCODEC_NAME, XBITS_FMT, XHZ, XCHANNELS, XCHANNELS_LAYOUT, XBITS, XBITS_RAW, XDURATION, XBITRATE, ORIGINAL_TAGS2
+        ) = ( (d[k] if k in d and d[k] != '' else None)
+            for d, K in (
+                ( fp['format'], (
+                    'format_name',
+                    'format_long_name',
+                    'tags',
+                )),
+                ( fpStream, (
+                    'codec_name',
+                    'codec_long_name',
+                    'sample_fmt',
+                    'sample_rate',
+                    'channels',
+                    'channel_layout',
+                    'bits_per_sample',
+                    'bits_per_raw_sample',
+                    'duration',
+                    'bit_rate',
+                    'tags',
+                )),
+            )
+            for k in K
+        )
+
+    except BaseException:
+        print(f'[{tid}] {original}: ERROR: FFPROBE FAILED')
+        traceback.print_exc()
+        continue
+
+    canais = int(XCHANNELS)
+
+    #
+    XFORMAT      = XFORMAT      .upper()
+    XFORMAT_NAME = XFORMAT_NAME .upper()
+    XCODEC       = XCODEC       .upper()
+    XCODEC_NAME  = XCODEC_NAME  .upper()
+
+    #
+    XPATH, XID, XTIME, XSIZE = original, mhash(), int(time.time()), originalSize
+
+    #
+    for t in tags.values():
+        t.clear()
+
+    convert = True
+
+    for T in (ORIGINAL_TAGS, ORIGINAL_TAGS2):
+
+        if T is None:
+            continue
+
+        #
+        T = { '_'.join(k[:80].replace('_', ' ').replace('-', ' ').split()).upper().replace('XMZK_TIME', 'CONVERSION_TIME').replace('XMZK_', 'ORIGINAL_'): ' '.join(v.split())[:300].rstrip().upper()
+            for k, v in T.items()
+                if k and v
+        }
+
+        #
+        if any(map(T.__contains__, ('CONVERSION_TIME', 'ORIGINAL_BITS', 'XID', 'XPATH', 'XTIME', 'XBITS'))):
+
+            #
+            convert = XCODEC in ('FLAC',)
+
+            # FORGET THIS      TODO: SE ESTIVER OK ENTAO MANTEM ELE
+            T.pop('XID', None)
+
+            #
+            ( XTIME,   XPATH ,  XCHANNELS_LAYOUT ,  XBITS ,  XBITS_RAW ,  XBITS_FMT ,  XFORMAT,   XFORMAT_NAME,   XCODEC,   XDURATION,   XCODEC_NAME,   XCHANNELS,   XHZ,   XSIZE,   XYOUTUBE) = ( T.pop(t, None) for t in
+            ('XTIME', 'XPATH', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_RAW', 'XBITS_FMT', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XDURATION', 'XCODEC_NAME', 'XCHANNELS', 'XHZ', 'XSIZE', 'XYOUTUBE'))
+
+            for t, vals in tags.items():
+                if v := T.pop(t, None):
+                    vals.update(v.split('|'))
+
+            # FORMATO VELHO
+            XTIME            = T.pop('CONVERSION_TIME',           XTIME)
+            XPATH            = T.pop('ORIGINAL_FILEPATH',         XPATH)
+            XPATH            = T.pop('ORIGINAL_FILENAME',         XPATH)
+            XPATH            = T.pop('ORIGINAL_PATH',             XPATH)
+            XCHANNELS_LAYOUT = T.pop('ORIGINAL_CHANNEL_LAYOUT',   XCHANNELS_LAYOUT)
+            XCHANNELS        = T.pop('ORIGINAL_CHANNELS',         XCHANNELS)
+            XBITS            = T.pop('ORIGINAL_BITS',             XBITS)
+            XBITS_RAW        = T.pop('ORIGINAL_BITS_RAW',         XBITS_RAW)
+            XBITS_FMT        = T.pop('ORIGINAL_SAMPLE_FMT',       XBITS_FMT)
+            XHZ              = T.pop('ORIGINAL_SAMPLE_RATE',      XHZ)
+            XFORMAT          = T.pop('ORIGINAL_FORMAT_NAME',      XFORMAT)
+            XFORMAT_NAME     = T.pop('ORIGINAL_FORMAT_NAME_LONG', XFORMAT_NAME)
+            XCODEC           = T.pop('ORIGINAL_CODEC_NAME',       XCODEC)
+            XCODEC_NAME      = T.pop('ORIGINAL_CODEC_LONG_NAME',  XCODEC_NAME)
+            XDURATION        = T.pop('ORIGINAL_DURATION',         XDURATION)
+            XBITRATE         = T.pop('ORIGINAL_BITRATE',          XBITRATE)
+            XCHANNELS_LAYOUT = T.pop('XCHANNEL_LAYOUT',           XCHANNELS_LAYOUT)
+            XCODEC_NAME      = T.pop('XCODEC_LONG_NAME',          XCODEC_NAME)
+            XFORMAT_NAME     = T.pop('XFORMAT_NAME_LONG',         XFORMAT_NAME)
+            XBITS_FMT        = T.pop('XSAMPLE_FMT',               XBITS_FMT)
+            XHZ              = T.pop('XSAMPLE_RATE',              XHZ)
+            XHZ              = T.pop('XSAMPLERATE',               XHZ)
+
+            if _ := T.pop('XSAMPLE', None):
+                XBITS_FMT, XBITS, XBITS_RAW = _.split('|')
+
+            if XBITS_FMT is None:
+                assert XBITS_RAW is None
+                XBITS_FMT, XBITS, XBITS_RAW = XBITS.split('|')
+
+            if XFORMAT and XFORMAT_NAME is None:
+                XFORMAT, XFORMAT_NAME = XFORMAT.split('|', 1)
+
+            if XCODEC and XCODEC_NAME is None:
+                XCODEC, XCODEC_NAME = XCODEC.split('|', 1)
+
+            if XFORMAT is None:
+                XFORMAT = ('FLAC',)[('RAW FLAC').index(XFORMAT_NAME)]
+
+            if XCODEC is None:
+                XCODEC = ('FLAC',)[(('FLAC', 'FLAC (FREE LOSSLESS AUDIO CODEC)'),).index((XFORMAT, XCODEC_NAME))]
+
+            if XCHANNELS and '|' in XCHANNELS and XCHANNELS_LAYOUT is None:
+                XCHANNELS_LAYOUT, XCHANNELS = XCHANNELS.split('|', 1)
+
+            # NOTE: MAY DON'T HAVE XBITS
+            # NOTE: MAY DON'T HAVE XCHANNELS_LAYOUT
+            assert all((XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ)), (original,
+                        (XPATH, XTIME, XCHANNELS, XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XDURATION, XHZ), T)
+
+        #
+        assert not 'XID'               in T
+        assert not 'XPATH'             in T
+        assert not 'XTIME'             in T
+        assert not 'XBITS'             in T
+        assert not 'CONVERSION_TIME'   in T
+        assert not 'ORIGINAL_FILEPATH' in T
+        assert not 'ORIGINAL_PATH'     in T
+        assert not 'ORIGINAL_BITS'     in T
+        assert not 'ORIGINAL_CHANNELS' in T
+        assert not 'ORIGINAL_CHANNEL_LAYOUT' in T
+        # assert not 'ORIGINAL_FILENAME' in T      !!! TODO :S
+
+        assert XID
+
+        # ORIGINAL TAGS
+        for k, v in T.items():
+            if 'MUSICBRAINZ' in k:
+                continue
+            # EXACT MATCH, THEN PARTIAL MATCH
+            if (t := TAGS_EXACTLY.get(k, None)) is None:
+                for old, new in TAGS_PARTIAL:
+                    if old in k:
+                        t = new
+                        break
+            # TODO: FIXME: SUPORTAR MULTIPLOS
+            if t is not None:
+                if isinstance(v, (list, tuple, set)):
+                    tags[t].update(v)
+                else:
+                    tags[t].add(v)
+
+    # PARSE/DEFAULTS
+    XCHANNELS    = int       (XCHANNELS)
+    XHZ          = int       (XHZ)
+    XBITS_FMT    = str.upper (XBITS_FMT)
+    XCODEC       = str.upper (XCODEC)
+    XCODEC_NAME  = str.upper (XCODEC_NAME)
+    XFORMAT      = str.upper (XFORMAT)
+    XFORMAT_NAME = str.upper (XFORMAT_NAME)
+
+    XBITS            = (0   if XBITS            is None else int       (XBITS))
+    XBITS_RAW        = (0   if XBITS_RAW        is None else int       (XBITS_RAW))
+    XCHANNELS_LAYOUT = ('-' if XCHANNELS_LAYOUT is None else str.upper (XCHANNELS_LAYOUT))
+    XDURATION        = (0   if XDURATION        is None else float     (XDURATION))
+
+    # VERIFY
+    if not (XBITS in (0, 8, 16, 24, 32)):
+        print(f'[{tid}] {original}: ERROR: BAD BITS: {XBITS}')
+        continue
+
+    if not (XBITS_RAW in (0, 8, 16, 24, 32)):
+        print(f'[{tid}] {original}: ERROR: BAD BITS RAW: {XBITS_RAW}')
+        continue
+
+    # WMA, S16P, 0, 0
+    if not (XBITS or XBITS_RAW): # -> 0, 0
+        if XBITS_FMT not in ('FLTP', 'S16P'):
+            print(f'[{tid}] {original}: ERROR: NO BITS ({XBITS_FMT})')
+            continue
+
+    if not (1 <= XCHANNELS <= 8):
+        print(f'[{tid}] {original}: ERROR: BAD CHANNELS: {XCHANNELS}')
+        continue
+
+    if not (XBITS_FMT in ('S16', 'S16P', 'S32', 'S32P', 'FLT', 'FLTP')):
+        print(f'[{tid}] {original}: ERROR: BAD SAMPLE FMT: {XBITS_FMT}')
+        continue
+
+    if not (20 <= XDURATION <= 7*24*60*60):
+        print(f'[{tid}] {original}: WARNING: BAD DURATION: {XDURATION}')
+
+    if not (8000 <= XHZ <= 192000):
+        print(f'[{tid}] {original}: ERROR: BAD SAMPLE RATE: {XHZ}')
+        continue
+
+    assert XFORMAT and XFORMAT_NAME
+    assert XCODEC  and XCODEC_NAME
+
+    #
+    for f in (tmpRAM, tmpDISK):
+        try:
+            os.unlink(f)
+        except FileNotFoundError:
+            pass
+
+    if XYOUTUBE is not None:
+        if 'youtu.be' in XYOUTUBE:
+            XYOUTUBE = XYOUTUBE.rsplit('/', 1)[1][0].split('?')[0]
+        elif '/watch?v=' in XYOUTUBE:
+            XYOUTUBE = XYOUTUBE.split('=')[1]
+        # https://www.youtube.com/watch?v=4LHYCXaI_CI
+        # https://youtu.be/4LHYCXaI_CI?
+    elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,16}\][.](m4a|opus|ogg|mp4|webm)$', original.lower()):
+        XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\][.].*$', original)
+    elif re.match(r'^.*youtube.*\[[0-9a-z_-]{5,16}\][.](m4a|opus|ogg|mp4|webm)$', XPATH.lower()):
+        XYOUTUBE, = re.findall(r'^.*\[([0-9A-Za-z_-]{5,})\][.].*$', XPATH)
+
+    assert XYOUTUBE is None or re.match(r'^[0-9A-Za-z_-]{5,16}$', XYOUTUBE)
+
+    #
+    cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
+
+    # TAGS
+    for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE', 'XSIZE', 'XYOUTUBE'):
+        if v := eval(t):
+            cmd.extend(('-metadata', f'{t}={v}'))
+    for t, v in tags.items():
+        if v := '|'.join(sorted(v)):
+            cmd.extend(('-metadata', f'{t}={v}'))
+
+    if XYOUTUBE is not None:
+        convert = {
+            ('OGG', 'OPUS'): False,
+            ('MOV,MP4,M4A,3GP,3G2,MJ2', 'AAC'): True,
+        } [(XFORMAT, XCODEC)]
+
+    # CONVERSION
+    if convert:
+        if XHZ != 48000 and False:
+            cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:out_sample_rate=48000:osr=48000:dither_method=none')) # , '-ar', '48000'
+            #@ffmpeg.exe -report -hide_banner -v 32 -stats -y -i "%filename%" -vn -af aresample=resampler=soxr:osr=48000:cutoff=0.990:dither_method=none,aformat=sample_fmts=s32:channel_layouts=0x60f -strict -2 -c:a dca -b:a 1536k -f wav "%~n1_dts.wav"
+            # cmd.extend(('-af', 'aresample=resampler=soxr:precision=30:osf=flt:out_sample_fmt=flt:out_sample_rate=48000:osr=48000', '-ar', '48000', '-sample_fmt', 'flt'))
+            # cmd.extend(('-af', 'aresample=48000:resampler=soxr:precision=30:osf=flt')) # :dither_method=triangular
+        if mono := (canais == 1 or not any( ('BINAURAL' in w) for W in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in W)):
+            cmd.extend(('-ac', '1'))
+        cmd.extend(('-c:a', 'libopus', '-qscale:a', '0', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
+        if mono: # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
+            cmd.extend(('-apply_phase_inv', '0'))
+        cmd.extend(('-vbr', 'on', '-b:a', '256k'))
+    else:
+        cmd.extend(('-map', '0:a', '-acodec', 'copy'))
+
+    # THE OUTPUT FILE
+    cmd.extend(('-fflags', '+bitexact', '-flags:a', '+bitexact', tmpRAM))
+
+    # EXECUTE THE CONVERSOR
+    if execute('/usr/bin/ffmpeg', cmd):
+        print(f'[{tid}] {original}: ERROR: ENCODE FAILED.')
+        continue
 
     # NOW COPY FROM TEMP
     o = os.open(tmpDISK, os.O_WRONLY | os.O_DIRECT | os.O_SYNC | os.O_CREAT | os.O_EXCL, 0o644)
@@ -651,24 +657,5 @@ for original in allfiles(sys.argv[1:]):
     os.unlink(original)
 
 print(f'[{tid}] EXITING')
-
-# WAIT ALL CHILDS TO FINISH
-while True:
-    try:
-        os.wait()
-    except ChildProcessError:
-        break
-    except KeyboardInterrupt:
-        pass
-
-# CLEAR ALL FILES
-for tid in range(CPUS):
-    for f in (f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'):
-        try:
-            os.unlink(f)
-        except FileNotFoundError:
-            pass
-
-os.unlink(f'/tmp/{TNAME}')
 
 exit(0)
