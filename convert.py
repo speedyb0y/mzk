@@ -116,39 +116,6 @@ assert not any (tags[t] for _, t in TAGS_PARTIAL)
 
 #export LC_ALL=en_US.UTF-8
 
-# WHERE TO SAVE THE CONVERTED FILES
-GOOD_DIR = '/mnt/sda2/CONVERTED'
-
-# HOW MANY PROCESSES TO RUN SIMULTANEOUSLY
-CPUS_MAX = 16
-
-def version (cmd, start):
-    with os.popen(cmd) as fd:
-        ret = fd.read(65536).startswith(start)
-    return ret
-
-# EXECUTE A COMMAND, WAIT FOR ALL IT'S CHILDS, AND RETURN ANY FAILURE FROM ANY OF THEM
-def execute (executable, args, env=os.environ):
-    if os.fork() == 0:
-        os.execve(executable, args, env)
-        exit(1)
-    fail = 0
-    try:
-        while True:
-            fail |= os.wait()[1]
-    except ChildProcessError:
-        pass
-    return fail
-
-#
-assert version('ffmpeg    -version', 'ffmpeg')
-assert version('operon   --version', 'operon')
-assert version('opusenc  --version', 'opusenc')
-assert version('opusdec  --version', 'opusdec')
-assert version('flac     --version', 'flac')
-assert version('metaflac --version', 'metaflac')
-assert version('soxi',               'soxi')
-
 def scandir (d):
     try:
         for f in os.listdir(d):
@@ -175,6 +142,37 @@ def mhash ():
         f //= 37
         if f == 0:
             return code
+
+# EXECUTE A COMMAND, WAIT FOR ALL IT'S CHILDS, AND RETURN ANY FAILURE FROM ANY OF THEM
+def execute (executable, args, env=os.environ):
+    if os.fork() == 0:
+        os.execve(executable, args, env)
+        exit(1)
+    fail = 0
+    try:
+        while True:
+            fail |= os.wait()[1]
+    except ChildProcessError:
+        pass
+    return fail
+
+for cmd, start in (
+    ('ffmpeg    -version', 'ffmpeg'),
+    ('operon   --version', 'operon'),
+    ('opusenc  --version', 'opusenc'),
+    ('opusdec  --version', 'opusdec'),
+    ('flac     --version', 'flac'),
+    ('metaflac --version', 'metaflac'),
+    ('soxi',               'soxi'),
+    ):
+    with os.popen(cmd) as fd:
+        assert fd.read(65536).startswith(start), (cmd)
+
+# WHERE TO SAVE THE CONVERTED FILES
+GOOD_DIR = '/mnt/sda2/CONVERTED'
+
+# HOW MANY PROCESSES TO RUN SIMULTANEOUSLY
+CPUS_MAX = 20
 
 PID = os.getpid()
 
