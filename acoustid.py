@@ -3,7 +3,7 @@
 import sys
 import os
 import time
-import json
+import orjson as json
 import cbor2 as cbor
 import requests
 
@@ -40,17 +40,23 @@ try:
                     'Accept': '*/*',
                     'Accept-Language': 'en-US,en;q=0.5',
                 })
+                print(response.encoding)
+                print(response.headers)
                 response = response.text.upper()
-                response = json.loads(response)
+                try:
+                    response = json.loads(response)
+                except:
+                    response = json.loads(response.encode().decode('iso8859-1'))
             except KeyboardInterrupt:
                 raise
-            except BaseException:
-                continue
+            except BaseException as e:
+                print(e, str(e), repr(e), type(e), response)
+                raise
 
             results.append((xid, duration, fingerprint, response))
 
 except BaseException:
-    pass
+    raise
 
 results = cbor.dumps(results)
 
