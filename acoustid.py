@@ -49,7 +49,7 @@ try:
             results.append((xid, duration, fingerprint, response))
 
 except BaseException:
-    raise
+    pass
 
 results = cbor.dumps(results)
 
