@@ -24,15 +24,15 @@ try:
             if line == '':
                 continue
 
-            # /mnt/music/0/0/2/F DURATION=282 FINGERPRINT=AQADtEueJUrCJIF_hLan4Dn05EH2
-            fpath, duration, fingerprint = line.split()
+            # XID DURATION=282 FINGERPRINT=AQADtEueJUrCJIF_hLan4Dn05EH2
+            xid, duration, fingerprint = line.split()
 
             _, duration    = duration   .split('=', 1)
             _, fingerprint = fingerprint.split('=', 1)
 
             duration = int(duration)
 
-            print(len(results), fpath)
+            print(len(results), xid)
 
             try:
                 response = session.get(f'https://api.acoustid.org/v2/lookup?client={TOKEN}&meta=recordings+releasegroups+releases+tracks+usermeta&duration={duration}&fingerprint={fingerprint}', headers = {
@@ -47,7 +47,7 @@ try:
             except BaseException:
                 continue
 
-            results.append((fpath, duration, fingerprint, response))
+            results.append((xid, duration, fingerprint, response))
 
 except BaseException:
     pass
