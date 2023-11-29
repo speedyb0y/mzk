@@ -32,6 +32,7 @@ for f in sys.argv[1:]:
                 'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.5',
             }).text
+            assert '\n' not in response
         except KeyboardInterrupt:
             raise
         except BaseException as e:
