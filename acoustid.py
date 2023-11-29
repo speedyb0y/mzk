@@ -11,19 +11,16 @@ TOKEN = "b'lfvGgAYa"
 
 session = requests.session()
 
-fd = os.open(f'TAGS-FETCHED.{time.time()}', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o0444)
-
 results = []
 
-try:
+for f in sys.argv[1:]:
 
-    for f in sys.argv[1:]:
+    for line in open(f).read().split('\n'):
 
-        for line in open(f).read().split('\n'):
+        if line == '':
+            continue
 
-            if line == '':
-                continue
-
+        try:
             # XID DURATION=282 FINGERPRINT=AQADtEueJUrCJIF_hLan4Dn05EH2
             xid, duration, fingerprint = line.split()
 
@@ -48,13 +45,15 @@ try:
 
             results.append((xid, duration, fingerprint, response))
 
-except BaseException:
-    pass
+        except BaseException:
+            pass
 
-results = cbor.dumps(results)
+    results_ = cbor.dumps(results)
 
-assert os.write(fd, results) == len(results)
+    with open(f'{f}.cbor', 'wb') as fd:
+        assert fd.write(results_) == len(results_)
 
+    results_ = results.clear()
 
 '''
 mkdir FINGERPRINTS ERRORS
