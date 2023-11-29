@@ -37,7 +37,7 @@ for f in sys.argv[1:]:
         except BaseException as e:
             continue
 
-        print((xid, duration, fingerprint, response))
+        print(xid, duration, fingerprint, response)
 
 '''
 mkdir FINGERPRINTS ERRORS
