@@ -35,18 +35,11 @@ try:
             print(len(results), xid)
 
             try:
-                response = session.get(f'https://api.acoustid.org/v2/lookup?client={TOKEN}&meta=recordings+releasegroups+releases+tracks+usermeta&duration={duration}&fingerprint={fingerprint}', headers = {
+                response = json.loads(session.get(f'https://api.acoustid.org/v2/lookup?client={TOKEN}&meta=recordings+releasegroups+releases+tracks+usermeta&duration={duration}&fingerprint={fingerprint}', headers = {
                     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0',
                     'Accept': '*/*',
                     'Accept-Language': 'en-US,en;q=0.5',
-                })
-                print(response.encoding)
-                print(response.headers)
-                response = response #.text.upper()
-                try:
-                    response = json.loads(response)
-                except:
-                    response = json.loads(response.encode().decode('iso8859-1'))
+                }).content)
             except KeyboardInterrupt:
                 raise
             except BaseException as e:
