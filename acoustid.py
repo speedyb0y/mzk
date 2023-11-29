@@ -44,7 +44,7 @@ try:
                 raise
             except BaseException as e:
                 print(e, str(e), repr(e), type(e), repr(response))
-                raise
+                continue
 
             results.append((xid, duration, fingerprint, response))
 
