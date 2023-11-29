@@ -42,7 +42,7 @@ try:
                 })
                 print(response.encoding)
                 print(response.headers)
-                response = response.text.upper()
+                response = response #.text.upper()
                 try:
                     response = json.loads(response)
                 except:
@@ -50,7 +50,7 @@ try:
             except KeyboardInterrupt:
                 raise
             except BaseException as e:
-                print(e, str(e), repr(e), type(e), response)
+                print(e, str(e), repr(e), type(e), repr(response))
                 raise
 
             results.append((xid, duration, fingerprint, response))
