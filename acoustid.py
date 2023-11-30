@@ -65,3 +65,5 @@ wait ; wait ; wait ; wait ; wait ; wait ; wait ; wait ; wait ; wait
 
 cat FINGERPRINTS/* | tr  '\n' ' ' | tr '\0' '\n' | awk -F / '{print $NF}' | sort -n > FINGERPRINTS.txt
 '''
+
+# vai = cbor.dumps([(xid, int(length.decode()), fp, json.loads(este := info)) for xid, length, fp, info in (line.split(b' ', 3) for line in open('PEGOS.txt', 'rb').read().split(b'\n') if line) if info and not info.startswith(b'upstream connect error')])
