@@ -6,28 +6,38 @@ import time
 import hashlib
 import re
 
+def scandir (d):
+    d = d.rstrip('/')
+    try:
+        for f in os.listdir(d):
+            yield from scandir(f'{d}/{f}')
+    except FileNotFoundError:
+        pass
+    except PermissionError:
+        pass
+    except NotADirectoryError:
+        yield d
+
 ALIGNMENT = 65536
 
 WRITE_SIZE = 128*1024*1024
 PIPE_SIZE = 256*1024*1024
 
-_, DIR, OUTPUT, NAME, AUTHOR = sys.argv
+_, OUTPUT, AUTHOR, LABEL, *DIRS = sys.argv
 
 #
-print('DIR:', DIR)
+print('DIRS:', DIRS)
 print('OUTPUT:', OUTPUT)
-print('NAME:', NAME)
 print('AUTHOR:', AUTHOR)
+print('LABEL:', LABEL)
 print('ALIGNMENT:', ALIGNMENT)
 print('PIPE SIZE:', PIPE_SIZE)
 print('WRITE SIZE:', WRITE_SIZE)
 
 #
-os.chdir(DIR)
-
 assert '/' in OUTPUT
-assert all((l in '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ') for l in NAME  ) and 1 <= len(NAME)   <= 28
-assert all((l in '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ') for l in AUTHOR) and 1 <= len(AUTHOR) <= 31
+assert all((l in '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_') for l in LABEL  ) and 1 <= len(LABEL)   <= 28
+assert all((l in '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ- ') for l in AUTHOR) and 1 <= len(AUTHOR) <= 31
 
 #
 open('/proc/sys/fs/pipe-max-size', 'w').write(str(PIPE_SIZE))
@@ -35,33 +45,43 @@ open('/proc/sys/fs/pipe-max-size', 'w').write(str(PIPE_SIZE))
 #
 HASH = ''.join('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'[x % 36] for x in hashlib.sha256(open('/dev/urandom', 'rb').read(256) + int(time.time()*1000).to_bytes(length=8, byteorder='little', signed=False)).digest())
 
-LABEL = '-'.join((NAME, HASH))[:32]
+assert len(LABEL) <= 32
+assert len(HASH) == 32
 
-print('LABEL:', LABEL)
+files = set()
 
-assert len(LABEL) == 32
+any(map(files.update, map(scandir, DIRS)))
 
-files = os.listdir('.')
+files = [f for _, f in sorted((f.rsplit('/', 1)[-1], f) for f in files)]
 
 print('FILES:', len(files))
 
+#print(files)
+
 # VERIFY FILE NAMES
-assert all(map(re.compile('^[0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]{10}[.](flac|opus|ogg)$').match, files))
+#assert all(map(re.compile('^[0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]{10}[.](flac|opus|ogg)$').match, files))
 # NO REPEATED FILE NAMES
 assert len(files) == len(set(map(str.upper, files)))
 
 # COMPUTE ESTIMATED SIZE
-ESTIMATED = sum((16 + os.stat(f).st_size) for f in files)
+ESTIMATED = sum((128 + os.stat(f).st_size + 2048) for f in files)
 
 print('ESTIMATED:', ESTIMATED)
 
 assert 1024 <= ESTIMATED
 
-os.system(' '.join(map(str, ( 'spipe', PIPE_SIZE, '/bin/mkisofs', 'mkisofs', '-quiet', '-V', LABEL, '-p', AUTHOR,
+open('/tmp/list', 'w').write('\n'.join(files) + '\n')
+open('/tmp/sort', 'w').write('\n'.join(f'{f} -{i}' for i, f in enumerate(files, 1)) + '\n')
+
+os.system(' '.join(map(str, ( 'spipe', PIPE_SIZE, '/bin/mkisofs', 'mkisofs', '-quiet',
+	'-V', LABEL,
+	'-appid', HASH,
+	'-preparer', str(int(time.time())),
+	'-publisher', AUTHOR,
     # SE NAO TEM INFO UNIX ENTAO NAO PRECISA DISSO
     # -uid 0 -gid 0 -dir-mode 0555 -file-mode 0444
     #-max-iso9660-filenames
-    '-full-iso9660-filenames',
+    #'-full-iso9660-filenames',
     # OMIT VERSION NUMBERS FROM ISO-9660 FILE NAMES.
     '-omit-version-number',
     #
@@ -84,7 +104,10 @@ os.system(' '.join(map(str, ( 'spipe', PIPE_SIZE, '/bin/mkisofs', 'mkisofs', '-q
     '-follow-links',
     '-posix-L',
     #
-    '.',
+    '-path-list', '/tmp/list',
+    '-sort', '/tmp/sort',
+    #'.',
+
     # 'oflag=direct,dsync' 'conv=fdatasync',iflag=fullblock
     '|', 'dd', f'ibs={64*1024*1024}', f'obs={WRITE_SIZE}', f'of={OUTPUT}', 'oflag=direct', 'status=progress'
 ))))
@@ -104,6 +127,6 @@ os.system(f'truncate --size={ROUND} {OUTPUT}')
 
 #
 with open(OUTPUT, 'rb') as fd:
-    assert os.pread(fd.fileno(), 32, 32808).decode() == LABEL
+    assert os.pread(fd.fileno(), 32, 32808).decode().startswith(LABEL)
 
 # sudo mount /mnt/BAD.iso -t iso9660 -o loop,ro,norock,nojoliet,check=strict,uid=0,gid=0,mode=0444,map=off,block=2048 /data/
