@@ -1,8 +1,6 @@
-# Maintainer: Fabio 'Lolix' Loli <fabio.loli@disroot.org> -> https://github.com/FabioLolix
-# Contributor: Lukas Fleischer <lfleischer@archlinux.org>
-# Contributor: Alexey Yakovenko <waker@users.sourceforge.net>
+#!/bin/bash
 
-# (cd /tmp/x && (rm -Rf /tmp/x/{src,pkg} || : ) && cat /home/speedyb0y/MUZIK/DEADBEEF.sh > PKGBUILD && makepkg -f)
+# (cd /tmp/x && (rm -Rf /tmp/x/{src,pkg} || : ) && cat /home/speedyb0y/mzk/DEADBEEF.sh > PKGBUILD && makepkg -f)
 
 pkgname=deadbeef
 pkgver=1.9.6
@@ -15,42 +13,26 @@ depends=(gtk3 alsa-lib jansson libdispatch)
 
 makedepends=(
     libvorbis
-    #libmad
     #flac
-    #curl
     #imlib2
-    #wavpack
     #libsndfile
-    #libcdio
-    #libcddb
     #libx11
-    #faad2
     zlib
     intltool
     libpipewire
-    #libpulse
     #libzip
     libsamplerate
     clang
-    yasm
-    #ffmpeg
+    #yasm
     opusfile
-    #mpg123
 )
 
 optdepends=(
     #'alsa-oss: for OSS output plugin'
-    #'cdparanoia: for cd audio plugin'
-    #'curl: for last.fm, vfs_curl (shoutcast/icecast), artwork plugins'
     #'dbus: for notification daemon support (OSD current song notifications)'
-    #'faad2: for AAC plugin'
-    #'ffmpeg: for ffmpeg plugin'
     #'flac: for flac plugin'
     #'imlib2: for artwork plugin'
-    #'libcddb: for cd audio plugin'
-    #'libcdio: for cd audio plugin'
     #'libice: optional dependency for gtkui session client support'
-    #'libmad: for mp3 plugin (mpeg1,2 layers1,2,3)'
     'libogg: for ogg vorbis plugin'
     'libpipewire: for pipewire plugin'
     'libsamplerate: for dsp_libsrc plugin (resampler)'
@@ -59,11 +41,8 @@ optdepends=(
     'libvorbis: for ogg vorbis plugin'
     #'libx11: for global hotkeys plugin'
     #'libzip: for vfs_zip plugin'
-    #'mpg123: for MP1/MP2/MP3 playback'
     'opusfile: for opus plugin'
-    #'pulseaudio: for PulseAudio output plugin'
-    #'wavpack: for wavpack plugin'
-    'yasm: required to build assembly portions of ffap plugin'
+    #'yasm: required to build assembly portions of ffap plugin'
     #'zlib: for Audio Overload plugin (psf, psf2, etc), GME (for vgz)'
 )
 
@@ -116,7 +95,6 @@ CONFIGURE_OPTS=(
      --enable-gtk3 # GTK3 user interface
      --enable-vfs-mzk #zip
     --disable-vfs-curl
-    --disable-lfm
     --disable-artwork{,-network}
      --enable-supereq      # equalizer based on Super EQ library by Naoki Shibata
     --disable-m3u
@@ -156,9 +134,9 @@ build () {
 		-e s/vfs-ZIP/vfs-MZK/g \
 		-e s/VFS-zip/VFS-mzk/g
 
-    cp -Ra ${HOME}/MUZIK/deadbeef plugins/vfs_mzk
+    cp -Ra ${HOME}/mzk/deadbeef plugins/vfs_mzk
 
-    ln -s -f -n ${HOME}/MUZIK/deadbeef/*.c plugins/vfs_mzk/
+    ln -s -f -n ${HOME}/mzk/deadbeef/*.c plugins/vfs_mzk/
 
     for sc in autogen.sh configure ; do
         ./${sc} ${CONFIGURE_OPTS[*]}
