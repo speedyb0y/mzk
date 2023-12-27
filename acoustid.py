@@ -3,7 +3,34 @@
 import sys
 import os
 import time
-import orjson as json
+import orjson
+import json
+import socket
+
+'''
+class Socket (socket.socket):
+
+    def __init__ (self, *x, **k):
+        super().__init__(*x, **k)
+        self.connect(('192.0.0.1', 443))
+        self.send(b''.join((
+            (0x01).to_bytes(length=1, signed=False, byteorder='big'),
+        len(b'api.acoustid.org').to_bytes(length=1, signed=False, byteorder='big'),
+            (443).to_bytes(length=2, signed=False, byteorder='big'),
+            b'api.acoustid.org',
+            b'\x00'
+            )))
+        assert self.recv(4) == b'\x00'
+
+    def connect(self, *_):
+        pass
+
+socket.socket = Socket
+'''
+
+json.dumps = orjson.dumps
+json.loads = orjson.loads
+
 import cbor2 as cbor
 import requests
 
@@ -11,25 +38,54 @@ TOKEN = "b'lfvGgAYa"
 
 session = requests.Session()
 
+def cacheado (C, obj):
+    if isinstance(obj, dict):
+        return {cacheado(C, k) : cacheado(C, v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [cacheado(C, o) for o in obj]
+    else:
+        if isinstance(obj, (str, bytes)):
+            obj = ' '.join(obj.upper().split())
+        try:
+            n = C[obj]
+        except KeyError:
+            n = C[obj] = len(C)
+        return n
+
 for f in sys.argv[1:]:
+
+    cache = {}
+
+    lista = []
 
     for xid, duration, fingerprint in (l.split() for l in open(f).read().split('\n') if l):
 
         duration = int(duration)
 
         try:
-            response = session.get(f'https://api.acoustid.org/v2/lookup?client={TOKEN}&meta=recordings+releasegroups+releases+tracks+usermeta&duration={duration}&fingerprint={fingerprint}', headers = {
+            response = session.get(f'https://api.acoustid.org/v2/lookup?client={TOKEN}&meta=recordings+releases+releasegroups&duration={duration}&fingerprint={fingerprint}', headers = {
                 'User-Agent': 'MyCollectionTagger',
                 'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.5',
-            }).text
-            assert '\n' not in response
+            }).json()
         except KeyboardInterrupt:
             raise
         except BaseException as e:
             continue
 
-        print(xid, duration, fingerprint, response)
+        # assert '\r' not in response
+        # print(xid, duration, fingerprint, response)
+
+        lista.append((xid, duration, fingerprint, cacheado(cache, response)))
+
+    lista = cbor.dumps((cache, lista))
+
+    cache.clear()
+
+    fd = os.open(f'{f}.cbor', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
+    assert os.write(fd, lista) == len(lista)
+    os.close(fd)
+
 
 '''
 mkdir FINGERPRINTS ERRORS

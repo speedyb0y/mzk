@@ -186,7 +186,7 @@ for cmd, start in (
 GOOD_DIR = '/mnt/sda2/CONVERTED'
 
 # HOW MANY PROCESSES TO RUN SIMULTANEOUSLY
-CPUS_MAX = 16
+CPUS_MAX = 6
 
 PID = os.getpid()
 
@@ -625,8 +625,8 @@ while True:
         continue
 
     #
-    with os.popen(f'ffmpeg -hide_banner -loglevel error -i {tmpRAM} -sample_fmt s32 -c:a pcm_s32le -f hash -hash sha512 -') as cmd:
-        checksum = cmd.read(1024)
+    with os.popen(f'ffmpeg -hide_banner -loglevel error -threads 1 -i {tmpRAM} -sample_fmt s32 -c:a pcm_s32le -f hash -hash sha512 -') as cmd:
+        checksum = cmd.read(256)
 
     if len(checksum) != len('SHA512=ca48f434aa3956330d97f3d3f9681f0ec842cbd4ce4bde7be981799b238e0b1bdc9a35e0f807a88f926c4250ac52899489273301dc1ec72513cd9ab38c03ab7e\n'):
         print(f'[{tid}] {original}: ERROR: BAD CHECKSUM.')
