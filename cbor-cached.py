@@ -1,6 +1,10 @@
 #!/usr/bin/python
 
+import sys
 import cbor2 as cbor
+
+# TODO: BYTES/STRINGS USADOS SOMENTE UMA VEZ E/OU CUJO ID FINAL SEJA MAIOR DO QUE ELA MESMA,
+#       ENCODAR DIRETO SEM USAR CACHE ID
 
 # STREAMING
 class CData:
@@ -23,7 +27,7 @@ class CData:
 
     def update (self, v):
         self.x.update(self.ENC(v))
-        
+
     # CACHE A VALUE, AND ENCODE IT AS CODE
     def ENC (self, obj):
         if isinstance(obj, (tuple, list, set)):
@@ -60,7 +64,7 @@ class CData:
             else:
                 code2 = { OPTIMIZE(k): OPTIMIZE(v) for k, v in code.items()}
             return code2
-        
+
         # OTIMIZA
         # CODIGOS, ORDENADOS PELA QUANTIDADE DE USOS
         NOVOS = [old for _, old in sorted(((next(counter), code) for obj, (code, counter) in self.CODES.items()), reverse=True)]
@@ -93,26 +97,32 @@ def CDATA_LOAD (encoded):
         return obj
 
     VALS, x = cbor.loads(encoded)
-    
+
     return DEC(x)
 
 ######
 
-orig = ( 1, 2,
-    # 'b', 'banana', 'c', 'laranja', 324234, 'banana',
-    'lista', ('um', 'dois', 'tres', 'quatro', 'laranja', 'cinco'),
-    'lista2', ('um', 'dois', 'tres', 'quatro', 'laranja', 'cinco'),
-    (None, [0,1,2,3,4,5,6,7,8,9]),
-    (False, [9,8,7,6,5,4,3,2,1,0]),
-    (True, [1,1,1,2,2,2,3,3,3,0,0,0, (None, False, True)]),
-    [0,1,2,3] * 10,
-    [0,1,2,3,4,5,6] * 20,
-    'quatro', 1, 0.2, -0.3
+def teste (orig):
+    encoded = CDATA_STORE(orig)
+    decoded = CDATA_LOAD(encoded)
+    # print('ORIGINAL:', orig)
+    print('ENCODED-CBOR:', len(encoded), len(encoded)/len(cbor.dumps(orig)))
+    # print('DECODED:', decoded)
+
+if len(sys.argv) == 1:
+    teste(
+        ( 1, 2,
+        # 'b', 'banana', 'c', 'laranja', 324234, 'banana',
+        'lista', ('um', 'dois', 'tres', 'quatro', 'laranja', 'cinco'),
+        'lista2', ('um', 'dois', 'tres', 'quatro', 'laranja', 'cinco'),
+        (None, [0,1,2,3,4,5,6,7,8,9]),
+        (False, [9,8,7,6,5,4,3,2,1,0]),
+        (True, [1,1,1,2,2,2,3,3,3,0,0,0, (None, False, True)]),
+        [0,1,2,3] * 10,
+        [0,1,2,3,4,5,6] * 20,
+        'quatro', 1, 0.2, -0.3
+        )
     )
-
-encoded = CDATA_STORE(orig)
-decoded = CDATA_LOAD(encoded)
-
-print('ORIGINAL:', orig)
-print('ENCODED-CBOR:', len(encoded)/len(cbor.dumps(orig)))
-print('DECODED:', decoded)
+else:
+    for orig in sys.argv[1:]:
+        teste( cbor.loads(open(orig, 'rb').read()) )
