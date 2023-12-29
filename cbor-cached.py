@@ -18,6 +18,12 @@ class CData:
     def add (self, v):
         self.x.add(self.ENC(v))
 
+    def extend (self, v):
+        self.x.extend(self.ENC(v))
+
+    def update (self, v):
+        self.x.update(self.ENC(v))
+        
     # CACHE A VALUE, AND ENCODE IT AS CODE
     def ENC (self, obj):
         if isinstance(obj, (tuple, list, set)):
@@ -44,7 +50,7 @@ class CData:
         assert len(self.CODES) == len(self.VALS)
 
         # OPTIMIZE
-        def OPTIMIZE (self, code):
+        def OPTIMIZE (code):
             if code is None or code is False or code is True:
                 code2 = code
             elif isinstance(code, int):
@@ -61,7 +67,7 @@ class CData:
         self.VALS = [ self.VALS[code] for code in NOVOS ]
       # NOVOS = { old: i for i, old in enumerate(NOVOS) }
         NOVOS = [ b for a, b in sorted((old, i) for i, old in enumerate(NOVOS)) ]
-        encoded = cbor.dumps((self.VALS, self.OPTIMIZE(self.x)))
+        encoded = cbor.dumps((self.VALS, OPTIMIZE(self.x)))
         self.CODES.clear()
         self.VALS.clear()
         self.x = None
