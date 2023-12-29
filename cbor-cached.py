@@ -2,7 +2,7 @@
 
 import cbor2 as cbor
 
-#
+# STREAMING
 class CData:
 
     def __init__ (self, x=None):
@@ -73,6 +73,10 @@ class CData:
         self.x = None
         return encoded
 
+# STORE
+def CDATA_STORE (orig)
+    return CData(orig).encode()
+
 # LOAD
 def CDATA_LOAD (encoded):
 
@@ -107,8 +111,7 @@ orig = ( 1, 2,
     'quatro', 1, 0.2, -0.3
     )
 
-encoded = CData(orig).encode()
-
+encoded = CDATA_STORE(orig)
 decoded = CDATA_LOAD(encoded)
 
 print('ORIGINAL:', orig)
