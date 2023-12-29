@@ -172,7 +172,6 @@ def execute (executable, args, env=os.environ):
 
 for cmd, start in (
     ('ffmpeg    -version', 'ffmpeg'),
-    ('operon   --version', 'operon'),
     ('opusenc  --version', 'opusenc'),
     ('opusdec  --version', 'opusdec'),
     ('flac     --version', 'flac'),
