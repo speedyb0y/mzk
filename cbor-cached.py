@@ -34,7 +34,7 @@ class CData:
            or obj is False
            or obj is True):
             code = obj
-        else:
+        else: # TODO: 0.0 -> 0, 1.0 -> 1, -1.0 -> -1 ETC
             assert obj is None or isinstance(obj, (bool, int, float, str, bytes))
             try:
                 code, counter = self.CODES[obj]
@@ -74,7 +74,7 @@ class CData:
         return encoded
 
 # STORE
-def CDATA_STORE (orig)
+def CDATA_STORE (orig):
     return CData(orig).encode()
 
 # LOAD
@@ -95,7 +95,6 @@ def CDATA_LOAD (encoded):
     VALS, x = cbor.loads(encoded)
     
     return DEC(x)
-
 
 ######
 
