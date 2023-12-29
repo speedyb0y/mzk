@@ -38,31 +38,32 @@ class CData:
             next(counter)
         return code
 
-    # OPTIMIZE
-    def OPTIMIZE (self, code):
-        if code is None or code is False or code is True:
-            code2 = code
-        elif isinstance(code, int):
-            code2 = self.NOVOS[code]
-        elif isinstance(code, (tuple, list, set)):
-            code2 = type(code)(map(self.OPTIMIZE, code))
-        else:
-            code2 = { self.OPTIMIZE(k): self.OPTIMIZE(v) for k, v in code.items()}
-        return code2
-
     # STORE
     def encode (self):
+
         assert len(self.CODES) == len(self.VALS)
+
+        # OPTIMIZE
+        def OPTIMIZE (self, code):
+            if code is None or code is False or code is True:
+                code2 = code
+            elif isinstance(code, int):
+                code2 = NOVOS[code]
+            elif isinstance(code, (tuple, list, set)):
+                code2 = type(code)(map(OPTIMIZE, code))
+            else:
+                code2 = { OPTIMIZE(k): OPTIMIZE(v) for k, v in code.items()}
+            return code2
+        
         # OTIMIZA
         # CODIGOS, ORDENADOS PELA QUANTIDADE DE USOS
         NOVOS = [old for _, old in sorted(((next(counter), code) for obj, (code, counter) in self.CODES.items()), reverse=True)]
         self.VALS = [ self.VALS[code] for code in NOVOS ]
-      # self.NOVOS = { old: i for i, old in enumerate(NOVOS) }
-        self.NOVOS = [ b for a, b in sorted((old, i) for i, old in enumerate(NOVOS)) ]
+      # NOVOS = { old: i for i, old in enumerate(NOVOS) }
+        NOVOS = [ b for a, b in sorted((old, i) for i, old in enumerate(NOVOS)) ]
         encoded = cbor.dumps((self.VALS, self.OPTIMIZE(self.x)))
-        self.CODES   = None
-        self.VALS    = None
-        self.NOVOS   = None
+        self.CODES.clear()
+        self.VALS.clear()
         self.x = None
         return encoded
 
