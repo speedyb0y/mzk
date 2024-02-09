@@ -6,16 +6,12 @@ culture.asian
 culture.br
 culture.slav
 
-movie------
-movie.hana
-movie.mortal-kombat
-movie.resident-evil
-movie.silent-hill
-movie.syphon-filter
+source---
+source.radio
+source.youtube
+source.soulseek
 
-origin.radio
-origin.youtube
-
+activity-----
 activity.action
 activity.car-race
 activity.distopy
@@ -31,6 +27,7 @@ activity.study
 activity.war
 activity.work
 
+country-----
 country.argentina
 country.brazil
 country.canada
@@ -45,6 +42,7 @@ country.united-states
 country.ukraine
 country.germany
 
+feel----
 feel.scary
 feel.thrill
 feel.calm
@@ -57,6 +55,7 @@ feel.sad
 feel.determined
 feel.depressed
 
+genre-----
 genre.ambient
 genre.bass-drive
 genre.beautiful
@@ -101,6 +100,7 @@ genre.synth-wave
 genre.techno
 genre.trap
 
+lang-----
 lang.arabic
 lang.chinese
 lang.english
@@ -111,19 +111,23 @@ lang.portuguese
 lang.russian
 lang.spanish
 
+mind-----
 mind.hz
 mind.healing
 mind.meditation
 
+voice-----
 voice.instrumental
 voice.female
 voice.male
 
+religion-----------
 religion.budhism
 religion.christianism
 religion.islamism
 religion.judaism
 
+artist----------------
 artist.9inch-nails
 artist.acdc
 artist.akira-yamaoka
@@ -167,17 +171,22 @@ artist.spineshank
 artist.within-temptation
 artist.ximena-sarinana
 
-ost.silent-hill
-ost.resident-evil
-ost.syphon-filter
-ost.tony-hawk
-ost.banlieu13
-ost.matrix
-ost.kill-bill
+movie------
+movie.hana
+movie.mortal-kombat
+movie.resident-evil
+movie.silent-hill
+movie.syphon-filter
+movie.tony-hawk
+movie.banlieu13
+movie.matrix
+movie.kill-bill
 
+style------
 style.maneiro
 style.romantic
 
+epoch-----------
 epoch.40s
 epoch.50s
 epoch.60s
