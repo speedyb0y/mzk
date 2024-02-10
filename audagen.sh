@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 #album
 #album-artist
 #comment
@@ -11,7 +10,7 @@
 
 echo title=Library
 
-soxi /mnt/sda2/CONVERTED/* | tr -c '\n-~' '-' | sed -r -e "s/' \(opus\)$//g" | sed -r -e 's/[A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12}([|]|$)//g' -e 's/[.][0-9]{1,}\s*$/000/g' \
+soxi /mnt/music/3/* | tr -c '\n-~' '-' | sed -r -e "s/' \(opus\)$//g" | sed -r -e 's/[A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{12}([|]|$)//g' -e 's/[.][0-9]{1,}\s*$/000/g' \
     -e s/^Input\\s*File\\s*:\\s*\'/uri=/g     \
     -e s/^XID=/catalog-number=/g \
     -e s/^XALBUM=/album=/g       \

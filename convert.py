@@ -33,6 +33,7 @@ tags = { t: set()
         'XTRACK',
         'XYEAR',
         'XYOUTUBE',
+        'XSOUNDCLOUD',
     )
 }
 
@@ -185,7 +186,7 @@ for cmd, start in (
 GOOD_DIR = '/mnt/sda2/CONVERTED'
 
 # HOW MANY PROCESSES TO RUN SIMULTANEOUSLY
-CPUS_MAX = 6
+CPUS_MAX = 14
 
 PID = os.getpid()
 
@@ -302,7 +303,7 @@ while True:
     i = o = imap = ibuff = fp = fpStream = cmd = checksum = None
 
     XID = XTIME = XPATH = XCHANNELS = XCHANNELS_LAYOUT = XBITS = XBITS_FMT = XBITS_RAW = XHZ = None
-    XDURATION = XFORMAT = XFORMAT_NAME = XCODEC = XCODEC_NAME = XBITRATE = XYOUTUBE = None
+    XDURATION = XFORMAT = XFORMAT_NAME = XCODEC = XCODEC_NAME = XBITRATE = XYOUTUBE = XSOUNDCLOUD = None
 
     original = os.read(pipeIn, 2048).decode()
 
@@ -450,8 +451,8 @@ while True:
             T.pop('XID', None)
 
             #
-            ( XTIME,   XPATH ,  XCHANNELS_LAYOUT ,  XBITS ,  XBITS_RAW ,  XBITS_FMT ,  XFORMAT,   XFORMAT_NAME,   XCODEC,   XDURATION,   XCODEC_NAME,   XCHANNELS,   XHZ,   XSIZE,   XYOUTUBE) = ( T.pop(t, None) for t in
-            ('XTIME', 'XPATH', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_RAW', 'XBITS_FMT', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XDURATION', 'XCODEC_NAME', 'XCHANNELS', 'XHZ', 'XSIZE', 'XYOUTUBE'))
+            ( XTIME,   XPATH ,  XCHANNELS_LAYOUT ,  XBITS ,  XBITS_RAW ,  XBITS_FMT ,  XFORMAT,   XFORMAT_NAME,   XCODEC,   XDURATION,   XCODEC_NAME,   XCHANNELS,   XHZ,   XSIZE,   XYOUTUBE,   XSOUNDCLOUD) = ( T.pop(t, None) for t in
+            ('XTIME', 'XPATH', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_RAW', 'XBITS_FMT', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XDURATION', 'XCODEC_NAME', 'XCHANNELS', 'XHZ', 'XSIZE', 'XYOUTUBE', 'XSOUNDCLOUD'))
 
             for t, vals in tags.items():
                 if v := T.pop(t, None):
@@ -579,11 +580,19 @@ while True:
 
     assert XYOUTUBE is None or re.match(r'^[0-9A-Za-z_-]{5,16}$', XYOUTUBE), (XYOUTUBE, original)
 
+    if XSOUNDCLOUD is None:
+        if re.match(r'^.*soundcloud.*\[[0-9]{5,20}\][.][0-9a-z]{2,5}$', XPATH.lower()):
+            XSOUNDCLOUD = XPATH.rsplit('[', 1)[-1].split(']')[0]
+            assert 1 <= int(XSOUNDCLOUD) <= 9999999999999999
+        elif re.match(r'^.*soundcloud.*\[[0-9]{5,20}\][.][0-9a-z]{2,5}$', original.lower()):
+            XSOUNDCLOUD = original.rsplit('[', 1)[-1].split(']')[0]
+            assert 1 <= int(XSOUNDCLOUD) <= 9999999999999999
+
     #
     cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
 
     # TAGS
-    for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE', 'XSIZE', 'XYOUTUBE'):
+    for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE', 'XSIZE', 'XYOUTUBE', 'XSOUNDCLOUD'):
         if v := eval(t):
             cmd.extend(('-metadata', f'{t}={v}'))
     for t, v in tags.items():
@@ -598,6 +607,13 @@ while True:
             (2, 'MOV,MP4,M4A,3GP,3G2,MJ2', 'AAC'): True,
         } [(channels, XFORMAT, XCODEC)]
 
+    if XCODEC == 'MP3':
+        br = int(XBITRATE)
+        assert 2048 <= br <= 999999999
+        br *= 0.95
+    else:
+        br = 256000
+
     # CONVERSION
     if convert:
         if mono := (channels == 1 or not any( ('BINAURAL' in w) for W in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in W)):
@@ -611,7 +627,13 @@ while True:
         cmd.extend(('-c:a', 'libopus', '-qscale:a', '0', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
         if mono: # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
             cmd.extend(('-apply_phase_inv', '0'))
-        cmd.extend(('-vbr', 'on', '-b:a', '256k'))
+        if br >= 255000:
+            br = '256k'
+        elif br <= 64000:
+            br = '64k'
+        else:
+            br = str(int(br))
+        cmd.extend(('-vbr', 'on', '-b:a', br))
     else:
         cmd.extend(('-map', '0:a', '-acodec', 'copy'))
 
