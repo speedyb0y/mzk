@@ -9,10 +9,25 @@ for f in sys.argv[1:]:
 
     youtube = title.rsplit('[', 1)[-1].split(']', 1)[0]
 
-    assert len(youtube) == len('JAcNXrW_J7o')
+    if not (len(youtube) == len('JAcNXrW_J7o')
+         or len(youtube) == len('JAcNXrW_J7o-LOWERCASED')):
+        print('BAD YOUTUBE:', youtube, f)
+        continue
 
     title = ' '.join(title.rsplit('[', 1)[0].split()).upper()
 
     print(youtube, f)
 
-    os.system(f"ffmpeg -y -hide_banner -loglevel error -bitexact -threads 1 -i '{f}' -map_metadata -1 -map_metadata:s -1 -f matroska -c:a copy -c:v copy -metadata TITLE='{title}' -metadata YOUTUBE={youtube} ./{youtube}.mkv")
+    fout = f'./{youtube}.mkv'
+
+    try:
+        fd = open(fout, 'r')
+    except FileNotFoundError:
+        pass
+    else:
+        print(f, 'ALREADY EXISTS:', fout)
+        fd.close()
+        continue
+
+    assert 0 == os.system(f"ffmpeg -y -hide_banner -loglevel error -bitexact -threads 1 -i '{f}' -map_metadata -1 -map_metadata:s -1 -f matroska -c:a copy -c:v copy -metadata TITLE='{title}' -metadata YOUTUBE={youtube} {fout}")
+    os.unlink(f)

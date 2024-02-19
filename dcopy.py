@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import sys
+import stat
 import os
 import mmap
 import io
@@ -83,8 +84,10 @@ try:
 except FileExistsError:
     pass
 
+# TODO: USE DIR FD
 def scandir (d):
-    try:
+    st = os.stat(d, follow_symlinks=False)
+    if stat.S_ISDIR(st.st_mode):
         fs = os.listdir(d)
         try:
             os.mkdir(f'{ddir}/{d}')
@@ -92,20 +95,18 @@ def scandir (d):
             pass
         for f in fs:
             yield from scandir(f'{d}/{f}')
-    except NotADirectoryError:
-        yield fibmap(d.encode()), d
+    elif stat.S_ISREG(st.st_mode) and st.st_size:
+        yield fibmap(d.encode()), d, st.st_size
 
 #
-for offset, orig in sorted(scandir('.')):
+for offset, orig, sizeOrig in sorted(scandir('.')):
 
     dest = f'{ddir}/{orig}'
 
-    sizeOrig = os.stat(orig).st_size
+    # TODO: FIXME: LINKS
+    # TODO: FIXME: CACHE ALREADY FS/DEV/INODE FILES SO WE HARD LINK THEM
 
-    print(offset, sizeOrig, orig)
-
-    if sizeOrig == 0:
-        continue
+    #print(offset, sizeOrig, orig)
 
     sizeAlign = ((sizeOrig + 4096 - 1) // 4096) * 4096
 
@@ -124,7 +125,8 @@ for offset, orig in sorted(scandir('.')):
 
     # RESERVE ALIGNED
     # 1 MORE BLOCK SO WE ALWAYS HAVE A DIFFERENT FILE SIZE
-    assert fresize(ofd, sizeAlign + 4096) == 0
+    _got = fresize(ofd, sizeAlign + 4096)
+    assert _got == 0, (dest, sizeAlign, _got)
 
     # RESIZE ALIGNED
     if sizeOrig != sizeAlign:

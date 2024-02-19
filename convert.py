@@ -246,7 +246,7 @@ if tid == CPUS:
     try:
         for f in sys.argv[1:]:
             for f in scandir(f):
-                if re.match('^.*[.](mp3|aac|flac|wav|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff)$', f.lower()):
+                if re.match('^.*[.](mp3|aac|flac|wav|m4a|ogg|opus|ape|wma|wv|alac|aif|aiff|webm|mkv|mp4)$', f.lower()):
                     i = os.open(f, os.O_RDONLY)
                     s = os.stat(i).st_size
                     if s < 65536:
@@ -272,7 +272,7 @@ if tid == CPUS:
 
     # CLEAR ALL FILES
     for tid in range(CPUS):
-        for f in (f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'):
+        for f in (f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/.TEMP-{TNAME}-{tid}'):
             try:
                 os.unlink(f)
             except FileNotFoundError:
@@ -289,7 +289,7 @@ print(f'[{tid}] LAUNCHED')
 os.close(pipeOut)
 
 #
-tmpRAM, tmpDISK  = f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/{TNAME}-{tid}.tmp'
+tmpRAM, tmpDISK  = f'/tmp/{TNAME}-{tid}', f'{GOOD_DIR}/.TEMP-{TNAME}-{tid}'
 
 i = o = imap = ibuff = None
 
@@ -341,7 +341,7 @@ while True:
         ( # FORMAT
             format, formatName, ORIGINAL_TAGS,
             # STREAM
-            codec, codecName, bitsFMT, hz, channels, channelsLayout, bits, bitsRaw, seconds, XBITRATE, ORIGINAL_TAGS2
+            codec, codecName, bitsFMT, hz, channels, channelsLayout, bits, bitsRaw, seconds, bitRate, ORIGINAL_TAGS2
         ) = ( (d[k] if k in d and d[k] != '' else None)
             for d, K in (
                 ( fp['format'], (
@@ -380,6 +380,7 @@ while True:
     codec       = str.upper (codec)
     codecName   = str.upper (codecName)
 
+    bitRate        = (0   if bitRate        is None else int       (bitRate))
     bits           = (0   if bits           is None else int       (bits))
     bitsRaw        = (0   if bitsRaw        is None else int       (bitsRaw))
     channelsLayout = ('-' if channelsLayout is None else str.upper (channelsLayout))
@@ -414,7 +415,7 @@ while True:
     # A PRINCIPIO, USA ELE MESMO
     XPATH, XID, XTIME, XSIZE = original, mhash(), int(time.time()), originalSize
     XFORMAT, XFORMAT_NAME, XCODEC, XCODEC_NAME, XHZ, XCHANNELS, XDURATION, XBITS_FMT = format, formatName, codec, codecName, hz, channels, seconds, bitsFMT
-    XCHANNELS_LAYOUT, XBITS, XBITS_RAW = channelsLayout, bits, bitsRaw
+    XCHANNELS_LAYOUT, XBITS, XBITS_RAW, XBITRATE = channelsLayout, bits, bitsRaw, bitRate
 
     #
     for t in tags.values():
@@ -589,7 +590,7 @@ while True:
             assert 1 <= int(XSOUNDCLOUD) <= 9999999999999999
 
     #
-    cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
+    cmd  = [ 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-bitexact', '-threads', '1', '-i', original, '-vn', '-f', 'opus', '-map_metadata', '-1', '-map_metadata:s', '-1' ]
 
     # TAGS
     for t in ('XID', 'XTIME', 'XPATH', 'XCHANNELS', 'XCHANNELS_LAYOUT', 'XBITS', 'XBITS_FMT', 'XBITS_RAW', 'XHZ', 'XDURATION', 'XFORMAT', 'XFORMAT_NAME', 'XCODEC', 'XCODEC_NAME', 'XBITRATE', 'XSIZE', 'XYOUTUBE', 'XSOUNDCLOUD'):
@@ -603,20 +604,15 @@ while True:
         convert = {
             (1, 'OGG', 'OPUS'): False,
             (2, 'OGG', 'OPUS'): False,
+            (2, 'MATROSKA,WEBM', 'OPUS'): False,
+            (2, 'MATROSKA,WEBM', 'OPUS'): False,
             (1, 'MOV,MP4,M4A,3GP,3G2,MJ2', 'AAC'): True,
             (2, 'MOV,MP4,M4A,3GP,3G2,MJ2', 'AAC'): True,
         } [(channels, XFORMAT, XCODEC)]
 
-    if XCODEC == 'MP3':
-        br = int(XBITRATE)
-        assert 2048 <= br <= 999999999
-        br *= 0.95
-    else:
-        br = 256000
-
     # CONVERSION
     if convert:
-        if mono := (channels == 1 or not any( ('BINAURAL' in w) for W in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME']) for w in W)):
+        if mono := (channels == 1 or not any( ('BINAURAL' in w) for W in ((original.upper(), XPATH.upper()), tags['XARTIST'], tags['XALBUM'], tags['XTITLE'], tags['XFILENAME'], tags['XGENRE']) for w in W)):
             cmd.extend(('-ac', '1'))
         # if hz != 48000:
             # aresample=48000:
@@ -627,12 +623,24 @@ while True:
         cmd.extend(('-c:a', 'libopus', '-qscale:a', '0', '-packet_loss', '0', '-application', 'audio', '-compression_level', '10'))
         if mono: # IF SET TO 0, DISABLES THE USE OF PHASE INVERSION FOR INTENSITY STEREO, IMPROVING THE QUALITY OF MONO DOWNMIXES
             cmd.extend(('-apply_phase_inv', '0'))
-        if br >= 255000:
-            br = '256k'
-        elif br <= 64000:
-            br = '64k'
+            if bitRate == 0:
+                br = 512000
+            elif codec in ('MP3', 'AAC', 'OGG', 'OPUS'):
+                # TODO: O CERTO SERIA PEGAR O TAMANHO TOTAL DO ARQUIVO ORIGINAL / LENGTH
+                br = bitRate
+                print(bitRate, '=', int((originalSize/seconds)*8), '|', codec, bitRate, originalSize, seconds)
+                assert 64000 <= br <= 512000, (codec, bitRate, originalSize, seconds)
+                br *= 0.95
+            else: # LOSSLESS
+                br = 256000
+            if br >= 255000:
+                br = '256k'
+            elif br <= 64000:
+                br = '64k'
+            else:
+                br = str(int(br))
         else:
-            br = str(int(br))
+            br = f'{256*channels}k'
         cmd.extend(('-vbr', 'on', '-b:a', br))
     else:
         cmd.extend(('-map', '0:a', '-acodec', 'copy'))
